@@ -1,0 +1,26 @@
+[project]
+name = "legalcheck-backend"
+version = "0.1.0"
+description = "Backend for Legal Fact Checker"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "python-dotenv",
+    "openai",
+    "langchain",
+    "langchain-community",
+    "langchain-openai",
+    "chromadb",
+    "langchain-chroma",
+    "tiktoken",
+    "pymupdf",
+    "python-multipart",
+    "pypdf>=6.7.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest"
+]
