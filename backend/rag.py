@@ -34,7 +34,7 @@ class LegalFactChecker:
         docs = await retriever.ainvoke(query)
         
         # 2. Construct prompt
-        context = "\n\n".join([d.page_content for d in docs])
+        context = "\n\n".join([d.metadata.get("original_text", d.page_content) for d in docs])
         
         system_prompt = """당신은 '법률/규정 기반 팩트체커'입니다.
 당신은 한국 노동법(근로기준법) 및 규정 해석에 강점이 있는 법률 전문가이자 IT 지식도 갖춘 페르소나를 가집니다.
