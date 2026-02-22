@@ -18,6 +18,10 @@ dependencies = [
     "pymupdf",
     "python-multipart",
     "pypdf>=6.7.1",
+    "sqlalchemy",
+    "pymysql",
+    "email-validator",
+    "pyjwt"
 ]
 
 [dependency-groups]
