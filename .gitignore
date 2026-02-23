@@ -1,2 +1,4 @@
 backend/.env
 .agent/rules/*
+backend/chroma_db
+backend/legalcheck.db
