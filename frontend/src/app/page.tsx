@@ -5,7 +5,12 @@ import { useSession, signIn, signOut } from "next-auth/react";
 
 interface ChatMessage {
   role: "user" | "ai";
-  content: string;
+  content: string; // Used for user input or raw text
+  // AI JSON response fields:
+  verdict?: string;
+  explanation?: string;
+  example_case?: string;
+  caution_note?: string;
   sources?: string[];
 }
 
@@ -47,9 +52,20 @@ export default function Home() {
       const data = await response.json();
       if (response.ok) {
         setSessionId(data.session_id);
+
+        // Handling structured JSON response from backend
+        // data.result contains the parsed JSON object
         setChatHistory((prev) => [
           ...prev,
-          { role: "ai", content: data.result, sources: data.sources },
+          {
+            role: "ai",
+            content: "",
+            verdict: data.result?.verdict || "ERROR",
+            explanation: data.result?.explanation || "응답을 생성할 수 없습니다.",
+            example_case: data.result?.example_case,
+            caution_note: data.result?.caution_note,
+            sources: data.sources
+          },
         ]);
       } else {
         setChatHistory((prev) => [
@@ -71,6 +87,20 @@ export default function Home() {
   if (status === "loading") {
     return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Loading...</div>;
   }
+
+  // Helper for rendering verdict badges
+  const getVerdictBadge = (verdict?: string) => {
+    switch (verdict) {
+      case "TRUE":
+        return <span className="bg-green-500/20 text-green-400 border border-green-500/50 px-3 py-1 rounded-full text-xs font-bold tracking-wide">사실성 높음 (TRUE)</span>;
+      case "PARTIAL":
+        return <span className="bg-yellow-500/20 text-yellow-400 border border-yellow-500/50 px-3 py-1 rounded-full text-xs font-bold tracking-wide">일부 사실 (PARTIAL)</span>;
+      case "FALSE":
+        return <span className="bg-red-500/20 text-red-400 border border-red-500/50 px-3 py-1 rounded-full text-xs font-bold tracking-wide">사실 아님 (FALSE)</span>;
+      default:
+        return <span className="bg-gray-500/20 text-gray-400 border border-gray-500/50 px-3 py-1 rounded-full text-xs font-bold tracking-wide">확인 불가 (ERROR)</span>;
+    }
+  };
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white selection:bg-indigo-500 selection:text-white flex flex-col">
@@ -127,23 +157,63 @@ export default function Home() {
                 </div>
               ) : (
                 chatHistory.map((msg, idx) => (
-                  <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div key={idx} className={`flex w-full ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                     <div className={`max-w-[85%] rounded-2xl p-5 ${msg.role === "user"
-                        ? "bg-indigo-600 text-white rounded-br-none shadow-md"
-                        : "bg-gray-800/80 border border-gray-700/50 text-gray-100 rounded-bl-none shadow-lg"
+                      ? "bg-indigo-600 text-white rounded-br-none shadow-md"
+                      : "bg-gray-800/80 border border-gray-700/50 text-gray-100 rounded-bl-none shadow-lg"
                       }`}>
-                      <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-                      {msg.sources && msg.sources.length > 0 && (
-                        <div className="mt-4 pt-4 border-t border-gray-600/50">
-                          <h4 className="text-xs text-gray-400 uppercase tracking-wider mb-2 font-semibold">참고 문서</h4>
-                          <ul className="space-y-1">
-                            {msg.sources.map((src, sIdx) => (
-                              <li key={sIdx} className="text-xs text-indigo-300 flex items-center">
-                                <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full mr-2"></span>
-                                {src}
-                              </li>
-                            ))}
-                          </ul>
+
+                      {msg.role === "user" ? (
+                        <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                      ) : (
+                        <div className="flex flex-col space-y-4">
+                          {/* Rendering parsed AI Response */}
+                          {msg.verdict && (
+                            <div className="mb-2">
+                              {getVerdictBadge(msg.verdict)}
+                            </div>
+                          )}
+
+                          {msg.explanation ? (
+                            <div className="text-gray-200 leading-relaxed whitespace-pre-wrap text-[15px]">
+                              {msg.explanation}
+                            </div>
+                          ) : (
+                            <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                          )}
+
+                          {msg.example_case && (
+                            <div className="bg-gray-900/50 p-3 rounded-lg border border-gray-700/30">
+                              <h4 className="text-sm text-indigo-400 font-bold mb-1 flex items-center">
+                                <span className="mr-2">💡</span>현실 적용 사례
+                              </h4>
+                              <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{msg.example_case}</p>
+                            </div>
+                          )}
+
+                          {msg.caution_note && (
+                            <div className="bg-red-900/10 p-3 rounded-lg border border-red-900/30">
+                              <h4 className="text-sm text-red-400 font-bold mb-1 flex items-center">
+                                <span className="mr-2">⚠️</span>주의사항
+                              </h4>
+                              <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{msg.caution_note}</p>
+                            </div>
+                          )}
+
+                          {/* Sources */}
+                          {msg.sources && msg.sources.length > 0 && (
+                            <div className="mt-2 pt-3 border-t border-gray-600/50">
+                              <h4 className="text-xs text-gray-400 uppercase tracking-wider mb-2 font-semibold">참고 문서</h4>
+                              <ul className="space-y-1">
+                                {msg.sources.map((src, sIdx) => (
+                                  <li key={sIdx} className="text-xs text-indigo-300 flex items-center">
+                                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full mr-2"></span>
+                                    {src}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
