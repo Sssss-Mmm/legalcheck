@@ -5,7 +5,7 @@ description = "Backend for Legal Fact Checker"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi",
+    "fastapi[standard]",
     "uvicorn",
     "python-dotenv",
     "openai",
@@ -21,7 +21,7 @@ dependencies = [
     "sqlalchemy",
     "pymysql",
     "email-validator",
-    "pyjwt"
+    "pyjwt",
 ]
 
 [dependency-groups]

@@ -65,3 +65,14 @@ class LoginPayload(BaseModel):
 class CheckRequest(BaseModel):
     query: str
     session_id: Optional[int] = None
+    options: Optional[dict] = None
+
+# --- Law Models Export ---
+from .law import (
+    TopicBase, TopicCreate, TopicResponse,
+    ExplanationCacheBase, ExplanationCacheCreate, ExplanationCacheResponse,
+    LawArticleRevisionBase, LawArticleRevisionCreate, LawArticleRevisionResponse,
+    LawArticleBase, LawArticleCreate, LawArticleResponse,
+    LawBase, LawCreate, LawResponse,
+    ClaimCheckBase, ClaimCheckCreate, ClaimCheckResponse
+)

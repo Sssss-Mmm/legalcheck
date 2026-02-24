@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.models import User, ChatSession, ChatMessage
+from app.models import User, ChatSession, ChatMessage, ClaimCheck, VerdictEnum, LawArticleRevision, ExplanationCache
 from app.schemas import LoginPayload, UserResponse, CheckRequest
 from app.core.database import get_db
 from app.services.rag_service import LegalFactChecker
+import json
 
 router = APIRouter()
 checker = LegalFactChecker()
@@ -59,14 +60,39 @@ async def check_fact(request: CheckRequest, user_id: int, db: Session = Depends(
 
     # Get RAG response
     result = await checker.check_fact_with_history(request.query, history)
+    
+    # Extract parsed JSON result from LLM
+    parsed_result = result["result"]
+    verdict_str = parsed_result.get("verdict", "ERROR").upper()
+    explanation = parsed_result.get("explanation", "")
+    example_case = parsed_result.get("example_case", "")
+    caution_note = parsed_result.get("caution_note", "")
+    sources = result.get("sources", [])
 
-    # Add AI message to DB
-    ai_msg = ChatMessage(session_id=session_id, role="ai", content=result["result"])
+    # Map string verdict to Enum
+    try:
+        verdict_enum = VerdictEnum(verdict_str)
+    except ValueError:
+        verdict_enum = VerdictEnum.PARTIAL # Defaulting on error
+
+    # Save ClaimCheck record
+    claim_check = ClaimCheck(
+        claim_text=request.query,
+        verdict=verdict_enum,
+        explanation=explanation
+    )
+    db.add(claim_check)
+    
+    # We could link the revision here if our retriever returned the revision IDs.
+    # Currently `sources` returns the document source, which could be modified in ingest_service to be the revision_id.
+    
+    # Add AI message to DB (storing as JSON string for now)
+    ai_msg = ChatMessage(session_id=session_id, role="ai", content=json.dumps(parsed_result, ensure_ascii=False))
     db.add(ai_msg)
     db.commit()
 
     return {
         "session_id": session_id,
-        "result": result["result"],
+        "result": parsed_result,
         "sources": result.get("sources", [])
     }

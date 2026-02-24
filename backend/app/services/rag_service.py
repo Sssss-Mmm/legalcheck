@@ -1,19 +1,27 @@
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_chroma import Chroma
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.output_parsers import StrOutputParser
+from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_classic.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
+from pydantic import BaseModel, Field
 import os
+
+class FactCheckResult(BaseModel):
+    verdict: str = Field(description="판정 결과: 'TRUE', 'PARTIAL', 'FALSE' 중 하나")
+    explanation: str = Field(description="관련 법 이름 및 조항 번호, 그리고 해당 조항에 대한 쉬운 해석 (3~5줄 이내)")
+    example_case: str = Field(description="일반인이 이해할 수 있는 구체적인 사례")
+    caution_note: str = Field(description="예외 상황, 오해하기 쉬운 부분, 분쟁 가능성 관련 주의사항")
 
 class LegalFactChecker:
     def __init__(self):
         self.embeddings = OpenAIEmbeddings()
         self.vector_store_path = "chroma_db"
-        # Initialize when needed or check if exists
         self.vector_store = None
         self.llm = ChatOpenAI(model="gpt-4o")
+        self.parser = JsonOutputParser(pydantic_object=FactCheckResult)
+
 
     def initialize_vector_store(self):
         if os.path.exists(self.vector_store_path):
@@ -49,42 +57,32 @@ class LegalFactChecker:
 3. **출처 명시**: 근거가 되는 법령명과 조항(예: 근로기준법 제36조)을 정확히 언급하세요.
 4. **안전 제일**: 확정적인 소송 조언이나 결과를 예단하지 마세요. 불법적인 행동을 조장하지 마세요.
 
-**답변 구조 (필수 준수):**
-모든 답변은 반드시 다음 5단계 구조를 따라야 합니다:
+**답변 형식:**
+반드시 아래의 지시사항에 따라 JSON 형태로 출력하세요.
 
-1️⃣ **핵심 요약** (3~5줄 이내)
-   - 질문에 대한 결론을 요약합니다. (사실/거짓/일부 사실 여부 포함)
+{format_instructions}
 
-2️⃣ **법 조문 기준 설명**
-   - 관련 법 이름 및 조항 번호
-   - 해당 조항에 대한 쉬운 해석
-
-3️⃣ **현실 적용 예시**
-   - 일반인이 이해할 수 있는 구체적인 사례
-
-4️⃣ **주의사항**
-   - 예외 상황, 오해하기 쉬운 부분, 분쟁 가능성
-
-5️⃣ **법률 상담 권장 여부**
-   - 실제 분쟁이나 소송 가능성이 있는 경우: "정확한 판단은 노무사/변호사 상담이 필요합니다."라고 명시
-   - 단순 정보일 경우: "이 설명은 일반적인 정보 제공 목적입니다."라는 면책 조항 포함
-
-**Context (법률 문맥):**
+**Context (법률/규정 데이터):**
 {context}
 
-사용자의 질문에 대해 위 Context를 근거로, 위 답변 구조에 맞춰 답변을 작성해 주세요.
+사용자의 주장에 대해 위 Context를 근거로 사실 여부를 판정하고 결과를 JSON으로 작성해 주세요.
 """
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("user", "{query}")
         ])
         
+        
         # 3. Call LLM
-        chain = prompt | self.llm | StrOutputParser()
-        response = await chain.ainvoke({"context": context, "query": query})
+        chain = prompt | self.llm | self.parser
+        response = await chain.ainvoke({
+            "context": context, 
+            "query": query,
+            "format_instructions": self.parser.get_format_instructions()
+        })
         
         return {
-            "result": response,
+            "result": response, # Dict containing verdict, explanation, etc.
             "sources": [d.metadata.get("source", "Unknown") for d in docs]
         }
 
@@ -133,30 +131,16 @@ class LegalFactChecker:
 3. **출처 명시**: 근거가 되는 법령명과 조항(예: 근로기준법 제36조)을 정확히 언급하세요.
 4. **안전 제일**: 확정적인 소송 조언이나 결과를 예단하지 마세요. 불법적인 행동을 조장하지 마세요.
 
-**답변 구조 (필수 준수):**
-모든 답변은 반드시 다음 5단계 구조를 따라야 합니다:
+**답변 형식:**
+반드시 아래의 지시사항에 따라 JSON 형태로 출력하세요. 출력 언어는 한국어입니다.
 
-1️⃣ **핵심 요약** (3~5줄 이내)
-   - 질문에 대한 결론을 요약합니다. (사실/거짓/일부 사실 여부 포함)
+{format_instructions}
 
-2️⃣ **법 조문 기준 설명**
-   - 관련 법 이름 및 조항 번호
-   - 해당 조항에 대한 쉬운 해석
-
-3️⃣ **현실 적용 예시**
-   - 일반인이 이해할 수 있는 구체적인 사례
-
-4️⃣ **주의사항**
-   - 예외 상황, 오해하기 쉬운 부분, 분쟁 가능성
-
-5️⃣ **법률 상담 권장 여부**
-   - 실제 분쟁이나 소송 가능성이 있는 경우: "정확한 판단은 노무사/변호사 상담이 필요합니다."라고 명시
-   - 단순 정보일 경우: "이 설명은 일반적인 정보 제공 목적입니다."라는 면책 조항 포함
-
-**Context (법률 문맥):**
+**Context (법률/규정 데이터):**
 {context}
 
-사용자의 질문에 대해 위 Context를 근거로, 위 답변 구조에 맞춰 답변을 작성해 주세요."""
+위 Context를 바탕으로 사용자의 최신 주장에 대한 사실 여부를 판정하고 JSON으로 답변을 작성해 주세요.
+"""
 
         qa_prompt = ChatPromptTemplate.from_messages(
             [
@@ -169,9 +153,28 @@ class LegalFactChecker:
         question_answer_chain = create_stuff_documents_chain(self.llm, qa_prompt)
         rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
 
-        response = await rag_chain.ainvoke({"input": query, "chat_history": formatted_history})
+        response = await rag_chain.ainvoke({
+            "input": query, 
+            "chat_history": formatted_history,
+            "format_instructions": self.parser.get_format_instructions()
+        })
+        
+        # 'answer' string is expected to be a valid JSON from the LLM, but create_stuff_documents_chain 
+        # normally outputs strings unless specifically integrated. Since we inject `format_instructions`,
+        # the LLM directly yields a JSON string. We can parse it here.
+        try:
+            import json
+            parsed_answer = json.loads(response["answer"])
+        except Exception:
+            # Fallback if the LLM output something invalid
+            parsed_answer = {
+                "verdict": "ERROR",
+                "explanation": response["answer"],
+                "example_case": "N/A",
+                "caution_note": "N/A"
+            }
         
         return {
-            "result": response["answer"],
+            "result": parsed_answer,
             "sources": [d.metadata.get("source", "Unknown") for d in response["context"]]
         }

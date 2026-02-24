@@ -38,3 +38,14 @@ class ChatMessage(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     session = relationship("ChatSession", back_populates="messages")
+
+# 새로 추가된 법률 관련 모델들 (ERD 설계 및 피드백 반영)
+from app.models.law import (
+    Law,
+    LawArticle,
+    LawArticleRevision,
+    Topic,
+    ClaimCheck,
+    ExplanationCache,
+    VerdictEnum
+)

@@ -30,3 +30,7 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
+
+# 관리자(Admin) 라우터 추가 등록
+from app.api.admin import router as admin_router
+app.include_router(admin_router)
