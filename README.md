@@ -4,6 +4,7 @@
 
 ## 프로젝트 구조
 - `backend/`: FastAPI 기반 API 서버 (uv 패키지 관리)
+  - `app/`: 핵심 비즈니스 로직 및 API 엔드포인트 계층형 디렉토리
 - `frontend/`: Next.js 기반 웹 애플리케이션
 
 ## 설치 및 실행 방법 (Setup Guide)
@@ -49,5 +50,5 @@ npm run dev
 ### 4. 백엔드 실행
 ```bash
 # backend 디렉토리에서 실행
-uv run uvicorn main:app --reload
+uv run fastapi dev app/main.py
 ```

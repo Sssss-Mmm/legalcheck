@@ -66,7 +66,13 @@ def ingest_data(file_paths: list[str]):
 
 if __name__ == "__main__":
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    data_dir = os.path.join(current_dir, "data")
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir))) 
+    # __file__ is backend/app/services/ingest_service.py
+    # dir: backend/app/services
+    # parent: backend/app
+    # app parent: backend
+    project_root = os.path.dirname(os.path.dirname(current_dir))
+    data_dir = os.path.join(project_root, "data")
     
     if not os.path.exists(data_dir):
         print(f"Data directory not found: {data_dir}")
