@@ -24,14 +24,29 @@ class LegalFactChecker:
 
 
     def initialize_vector_store(self):
-        if os.path.exists(self.vector_store_path):
-            self.vector_store = Chroma(
-                persist_directory=self.vector_store_path,
-                embedding_function=self.embeddings
-            )
-        else:
-            # Handle initialization logic
-            pass
+        self.vector_store = Chroma(
+            persist_directory=self.vector_store_path,
+            embedding_function=self.embeddings
+        )
+
+    async def add_revisions(self, revisions_data: list[dict]):
+        if not self.vector_store:
+            self.initialize_vector_store()
+            
+        from langchain_core.documents import Document
+        
+        docs = []
+        for rev in revisions_data:
+            metadata = {
+                "law_id": rev.get("law_id"),
+                "article_id": rev.get("article_id"),
+                "revision_id": rev.get("revision_id"),
+                "source": f"{rev.get('law_name', '법')} {rev.get('article_number', '조항')}"
+            }
+            docs.append(Document(page_content=rev["content"], metadata=metadata))
+            
+        if docs:
+            self.vector_store.add_documents(docs)
 
     async def check_fact(self, query: str):
         if not self.vector_store:
@@ -83,7 +98,8 @@ class LegalFactChecker:
         
         return {
             "result": response, # Dict containing verdict, explanation, etc.
-            "sources": [d.metadata.get("source", "Unknown") for d in docs]
+            "sources": [d.metadata.get("source", "Unknown") for d in docs],
+            "revision_ids": [d.metadata.get("revision_id") for d in docs if "revision_id" in d.metadata]
         }
 
     async def check_fact_with_history(self, query: str, chat_history: list):
@@ -176,5 +192,6 @@ class LegalFactChecker:
         
         return {
             "result": parsed_answer,
-            "sources": [d.metadata.get("source", "Unknown") for d in response["context"]]
+            "sources": [d.metadata.get("source", "Unknown") for d in response["context"]],
+            "revision_ids": [d.metadata.get("revision_id") for d in response["context"] if "revision_id" in d.metadata]
         }

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
 import os
@@ -39,13 +39,25 @@ def create_article(article: LawArticleCreate, db: Session = Depends(get_db)):
     return db_article
 
 @router.post("/revisions", response_model=LawArticleRevisionResponse)
-def create_revision(revision: LawArticleRevisionCreate, db: Session = Depends(get_db)):
+def create_revision(revision: LawArticleRevisionCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     db_revision = LawArticleRevision(**revision.model_dump())
     db.add(db_revision)
     db.commit()
     db.refresh(db_revision)
     
-    # TODO: Trigger background task to embed this revision into ChromaDB
+    article = db.query(LawArticle).filter(LawArticle.id == revision.article_id).first()
+    if article:
+        law = db.query(Law).filter(Law.id == article.law_id).first()
+        from app.services.rag_service import LegalFactChecker
+        checker = LegalFactChecker()
+        background_tasks.add_task(checker.add_revisions, [{
+            "law_id": article.law_id,
+            "article_id": article.id,
+            "revision_id": db_revision.id,
+            "content": db_revision.content,
+            "law_name": law.name if law else "Unknown",
+            "article_number": article.article_number
+        }])
     
     return db_revision
 
@@ -68,7 +80,7 @@ class ParsedLaw(BaseModel):
     articles: List[ParsedArticle] = Field(description="추출된 법 조문 목록")
 
 @router.post("/laws/{law_id}/upload_pdf")
-async def upload_law_pdf(law_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_law_pdf(law_id: int, background_tasks: BackgroundTasks, file: UploadFile = File(...), db: Session = Depends(get_db)):
     """
     법률 PDF 파일을 업로드하면 LLM을 이용해 조문별로 텍스트를 분리하고 DB에 자동 삽입합니다.
     """
@@ -112,6 +124,7 @@ async def upload_law_pdf(law_id: int, file: UploadFile = File(...), db: Session 
         parsed_result = chain.invoke({"text": text_to_process})
         
         created_articles = []
+        embedded_revisions = []
         from datetime import date
         
         # Insert extracted articles into DB
@@ -134,15 +147,28 @@ async def upload_law_pdf(law_id: int, file: UploadFile = File(...), db: Session 
                 effective_end_date=None
             )
             db.add(db_revision)
+            db.flush() # To get the revision ID
             
             created_articles.append({
                 "article_number": db_article.article_number,
                 "title": db_article.title
             })
             
+            embedded_revisions.append({
+                "law_id": law_id,
+                "article_id": db_article.id,
+                "revision_id": db_revision.id,
+                "content": db_revision.content,
+                "law_name": law.name,
+                "article_number": db_article.article_number
+            })
+            
         db.commit()
         
-        # TODO: Trigger vector store update for the new revisions
+        # Trigger vector store update for the new revisions
+        from app.services.rag_service import LegalFactChecker
+        checker = LegalFactChecker()
+        background_tasks.add_task(checker.add_revisions, embedded_revisions)
         
         return {
             "message": f"Successfully parsed and inserted {len(created_articles)} articles.",

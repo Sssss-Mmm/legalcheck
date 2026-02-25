@@ -16,11 +16,32 @@ interface ChatMessage {
 
 export default function Home() {
   const { data: session, status } = useSession();
+  const [activeTab, setActiveTab] = useState<"chat" | "search">("chat");
   const [query, setQuery] = useState("");
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery) return;
+    setIsSearching(true);
+    try {
+      const res = await fetch(`http://localhost:8000/search/articles?query=${encodeURIComponent(searchQuery)}`);
+      const data = await res.json();
+      setSearchResults(data.results || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSearching(false);
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -148,114 +169,170 @@ export default function Home() {
             </button>
           </div>
         ) : (
-          <>
-            <div className="flex-grow overflow-y-auto space-y-6 pr-2 custom-scrollbar pb-6 rounded-xl">
-              {chatHistory.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-gray-500">
-                  <p>궁금한 법률 질문을 편하게 입력해주세요.</p>
-                  <p className="text-sm mt-2">예: 수습 기간에 해고하면 월급은 어떻게 되나요?</p>
-                </div>
-              ) : (
-                chatHistory.map((msg, idx) => (
-                  <div key={idx} className={`flex w-full ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[85%] rounded-2xl p-5 ${msg.role === "user"
-                      ? "bg-indigo-600 text-white rounded-br-none shadow-md"
-                      : "bg-gray-800/80 border border-gray-700/50 text-gray-100 rounded-bl-none shadow-lg"
-                      }`}>
+          <div className="flex flex-col h-full overflow-hidden">
+            {/* Tabs */}
+            <div className="flex space-x-4 mb-4 border-b border-gray-700/50 pb-2 flex-shrink-0">
+              <button
+                onClick={() => setActiveTab("chat")}
+                className={`pb-2 px-2 text-sm font-medium transition-colors ${activeTab === "chat" ? "text-indigo-400 border-b-2 border-indigo-400" : "text-gray-400 hover:text-gray-200"}`}
+              >
+                팩트체크 대화
+              </button>
+              <button
+                onClick={() => setActiveTab("search")}
+                className={`pb-2 px-2 text-sm font-medium transition-colors ${activeTab === "search" ? "text-indigo-400 border-b-2 border-indigo-400" : "text-gray-400 hover:text-gray-200"}`}
+              >
+                조문 검색
+              </button>
+            </div>
 
-                      {msg.role === "user" ? (
-                        <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-                      ) : (
-                        <div className="flex flex-col space-y-4">
-                          {/* Rendering parsed AI Response */}
-                          {msg.verdict && (
-                            <div className="mb-2">
-                              {getVerdictBadge(msg.verdict)}
-                            </div>
-                          )}
+            {activeTab === "chat" ? (
+              <>
+                <div className="flex-grow overflow-y-auto space-y-6 pr-2 custom-scrollbar pb-6 rounded-xl">
+                  {chatHistory.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-gray-500">
+                      <p>궁금한 법률 질문을 편하게 입력해주세요.</p>
+                      <p className="text-sm mt-2">예: 수습 기간에 해고하면 월급은 어떻게 되나요?</p>
+                    </div>
+                  ) : (
+                    chatHistory.map((msg, idx) => (
+                      <div key={idx} className={`flex w-full ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                        <div className={`max-w-[85%] rounded-2xl p-5 ${msg.role === "user"
+                          ? "bg-indigo-600 text-white rounded-br-none shadow-md"
+                          : "bg-gray-800/80 border border-gray-700/50 text-gray-100 rounded-bl-none shadow-lg"
+                          }`}>
 
-                          {msg.explanation ? (
-                            <div className="text-gray-200 leading-relaxed whitespace-pre-wrap text-[15px]">
-                              {msg.explanation}
-                            </div>
-                          ) : (
+                          {msg.role === "user" ? (
                             <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-                          )}
+                          ) : (
+                            <div className="flex flex-col space-y-4">
+                              {/* Rendering parsed AI Response */}
+                              {msg.verdict && (
+                                <div className="mb-2">
+                                  {getVerdictBadge(msg.verdict)}
+                                </div>
+                              )}
 
-                          {msg.example_case && (
-                            <div className="bg-gray-900/50 p-3 rounded-lg border border-gray-700/30">
-                              <h4 className="text-sm text-indigo-400 font-bold mb-1 flex items-center">
-                                <span className="mr-2">💡</span>현실 적용 사례
-                              </h4>
-                              <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{msg.example_case}</p>
-                            </div>
-                          )}
+                              {msg.explanation ? (
+                                <div className="text-gray-200 leading-relaxed whitespace-pre-wrap text-[15px]">
+                                  {msg.explanation}
+                                </div>
+                              ) : (
+                                <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                              )}
 
-                          {msg.caution_note && (
-                            <div className="bg-red-900/10 p-3 rounded-lg border border-red-900/30">
-                              <h4 className="text-sm text-red-400 font-bold mb-1 flex items-center">
-                                <span className="mr-2">⚠️</span>주의사항
-                              </h4>
-                              <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{msg.caution_note}</p>
-                            </div>
-                          )}
+                              {msg.example_case && (
+                                <div className="bg-gray-900/50 p-3 rounded-lg border border-gray-700/30">
+                                  <h4 className="text-sm text-indigo-400 font-bold mb-1 flex items-center">
+                                    <span className="mr-2">💡</span>현실 적용 사례
+                                  </h4>
+                                  <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{msg.example_case}</p>
+                                </div>
+                              )}
 
-                          {/* Sources */}
-                          {msg.sources && msg.sources.length > 0 && (
-                            <div className="mt-2 pt-3 border-t border-gray-600/50">
-                              <h4 className="text-xs text-gray-400 uppercase tracking-wider mb-2 font-semibold">참고 문서</h4>
-                              <ul className="space-y-1">
-                                {msg.sources.map((src, sIdx) => (
-                                  <li key={sIdx} className="text-xs text-indigo-300 flex items-center">
-                                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full mr-2"></span>
-                                    {src}
-                                  </li>
-                                ))}
-                              </ul>
+                              {msg.caution_note && (
+                                <div className="bg-red-900/10 p-3 rounded-lg border border-red-900/30">
+                                  <h4 className="text-sm text-red-400 font-bold mb-1 flex items-center">
+                                    <span className="mr-2">⚠️</span>주의사항
+                                  </h4>
+                                  <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{msg.caution_note}</p>
+                                </div>
+                              )}
+
+                              {/* Sources */}
+                              {msg.sources && msg.sources.length > 0 && (
+                                <div className="mt-2 pt-3 border-t border-gray-600/50">
+                                  <h4 className="text-xs text-gray-400 uppercase tracking-wider mb-2 font-semibold">참고 문서</h4>
+                                  <ul className="space-y-1">
+                                    {msg.sources.map((src, sIdx) => (
+                                      <li key={sIdx} className="text-xs text-indigo-300 flex items-center">
+                                        <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full mr-2"></span>
+                                        {src}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
-                      )}
+                      </div>
+                    ))
+                  )}
+                  {loading && (
+                    <div className="flex justify-start">
+                      <div className="bg-gray-800/80 border border-gray-700/50 p-4 rounded-2xl rounded-bl-none flex space-x-2">
+                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce delay-75"></div>
+                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce delay-150"></div>
+                      </div>
                     </div>
-                  </div>
-                ))
-              )}
-              {loading && (
-                <div className="flex justify-start">
-                  <div className="bg-gray-800/80 border border-gray-700/50 p-4 rounded-2xl rounded-bl-none flex space-x-2">
-                    <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce delay-75"></div>
-                    <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce delay-150"></div>
-                  </div>
+                  )}
+                  <div ref={messagesEndRef} />
                 </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
 
-            {/* Input Form */}
-            <div className="w-full mt-4 bg-gray-900 sticky bottom-0 z-10 py-4">
-              <form onSubmit={handleCheck} className="relative group w-full">
-                <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl blur opacity-25 transition duration-1000 group-focus-within:opacity-50 group-hover:opacity-50"></div>
-                <div className="relative flex items-center bg-gray-900 rounded-2xl p-1 border border-gray-700/50 shadow-2xl">
+                {/* Input Form */}
+                <div className="w-full mt-4 bg-gray-900 sticky bottom-0 z-10 py-4">
+                  <form onSubmit={handleCheck} className="relative group w-full">
+                    <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl blur opacity-25 transition duration-1000 group-focus-within:opacity-50 group-hover:opacity-50"></div>
+                    <div className="relative flex items-center bg-gray-900 rounded-2xl p-1 border border-gray-700/50 shadow-2xl">
+                      <input
+                        type="text"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="질문을 입력하세요..."
+                        className="flex-grow bg-transparent text-white placeholder-gray-500 px-6 py-4 focus:outline-none"
+                        disabled={loading}
+                      />
+                      <button
+                        type="submit"
+                        disabled={loading || !query}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white p-3 rounded-xl transition-all duration-300 mr-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </>
+            ) : (
+              <div className="flex-grow flex flex-col h-full overflow-hidden">
+                <form onSubmit={handleSearch} className="mb-4 flex gap-2 flex-shrink-0">
                   <input
                     type="text"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="질문을 입력하세요..."
-                    className="flex-grow bg-transparent text-white placeholder-gray-500 px-6 py-4 focus:outline-none"
-                    disabled={loading}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="검색할 규정이나 법령 키워드를 입력하세요..."
+                    className="flex-grow bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-indigo-500"
                   />
                   <button
                     type="submit"
-                    disabled={loading || !query}
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white p-3 rounded-xl transition-all duration-300 mr-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isSearching || !searchQuery}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl transition-all disabled:opacity-50"
                   >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    {isSearching ? "검색 중..." : "검색"}
                   </button>
+                </form>
+
+                <div className="flex-grow overflow-y-auto space-y-4 pr-2 custom-scrollbar pb-6 rounded-xl">
+                  {searchResults.length === 0 && !isSearching ? (
+                    <div className="text-center text-gray-500 mt-10">검색 결과가 여기에 표시됩니다.</div>
+                  ) : (
+                    searchResults.map((result, idx) => (
+                      <div key={idx} className="bg-gray-800 border border-gray-700 rounded-xl p-5 shadow-sm">
+                        <h3 className="text-lg font-bold text-indigo-300 mb-2">
+                          {result.law_name} {result.article_number}
+                        </h3>
+                        <p className="text-gray-300 whitespace-pre-wrap leading-relaxed text-[15px]">
+                          {result.content}
+                        </p>
+                      </div>
+                    ))
+                  )}
                 </div>
-              </form>
-            </div>
-          </>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </main>

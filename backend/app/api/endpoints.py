@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
-from app.models import User, ChatSession, ChatMessage, ClaimCheck, VerdictEnum, LawArticleRevision, ExplanationCache
+from app.models import User, ChatSession, ChatMessage, ClaimCheck, VerdictEnum, LawArticleRevision, ExplanationCache, LawArticle, Law
 from app.schemas import LoginPayload, UserResponse, CheckRequest
 from app.core.database import get_db
 from app.services.rag_service import LegalFactChecker
@@ -13,6 +14,22 @@ checker = LegalFactChecker()
 @router.get("/")
 def read_root():
     return {"status": "ok", "message": "Legal Fact Checker API is running"}
+
+@router.get("/search/articles")
+def search_articles(query: str = Query(..., description="검색할 키워드"), db: Session = Depends(get_db)):
+    """조문 키워드 검색 API"""
+    revisions = db.query(LawArticleRevision).filter(LawArticleRevision.content.ilike(f"%{query}%")).limit(10).all()
+    results = []
+    for rev in revisions:
+        article = db.query(LawArticle).filter(LawArticle.id == rev.article_id).first()
+        law = db.query(Law).filter(Law.id == article.law_id).first() if article else None
+        results.append({
+            "law_name": law.name if law else "Unknown",
+            "article_number": article.article_number if article else "Unknown",
+            "content": rev.content[:200] + "...", # Preview
+            "revision_id": rev.id
+        })
+    return {"results": results}
 
 @router.post("/auth/login", response_model=UserResponse)
 def login(payload: LoginPayload, db: Session = Depends(get_db)):
@@ -61,13 +78,37 @@ async def check_fact(request: CheckRequest, user_id: int, db: Session = Depends(
     # Get RAG response
     result = await checker.check_fact_with_history(request.query, history)
     
-    # Extract parsed JSON result from LLM
     parsed_result = result["result"]
     verdict_str = parsed_result.get("verdict", "ERROR").upper()
     explanation = parsed_result.get("explanation", "")
     example_case = parsed_result.get("example_case", "")
     caution_note = parsed_result.get("caution_note", "")
     sources = result.get("sources", [])
+    
+    # Check for caching if we have revision_ids from the retrieval
+    revision_ids = result.get("revision_ids", [])
+    primary_revision_id = int(revision_ids[0]) if revision_ids else None
+    
+    if primary_revision_id:
+        cache = db.query(ExplanationCache).filter(ExplanationCache.article_revision_id == primary_revision_id).first()
+        if cache:
+            # Overwrite with high-quality cached explanation/examples
+            explanation = cache.plain_summary
+            example_case = cache.example_case
+            caution_note = cache.caution_note
+            parsed_result["explanation"] = explanation
+            parsed_result["example_case"] = example_case
+            parsed_result["caution_note"] = caution_note
+        else:
+            # Save new high-quality explanation to cache
+            new_cache = ExplanationCache(
+                article_revision_id=primary_revision_id,
+                plain_summary=explanation,
+                example_case=example_case,
+                caution_note=caution_note
+            )
+            db.add(new_cache)
+            # We don't commit immediately, it'll be committed with the rest
 
     # Map string verdict to Enum
     try:
@@ -84,7 +125,10 @@ async def check_fact(request: CheckRequest, user_id: int, db: Session = Depends(
     db.add(claim_check)
     
     # We could link the revision here if our retriever returned the revision IDs.
-    # Currently `sources` returns the document source, which could be modified in ingest_service to be the revision_id.
+    if primary_revision_id:
+        rev_obj = db.query(LawArticleRevision).filter(LawArticleRevision.id == primary_revision_id).first()
+        if rev_obj:
+            claim_check.revisions.append(rev_obj)
     
     # Add AI message to DB (storing as JSON string for now)
     ai_msg = ChatMessage(session_id=session_id, role="ai", content=json.dumps(parsed_result, ensure_ascii=False))
@@ -94,5 +138,5 @@ async def check_fact(request: CheckRequest, user_id: int, db: Session = Depends(
     return {
         "session_id": session_id,
         "result": parsed_result,
-        "sources": result.get("sources", [])
+        "sources": sources
     }
