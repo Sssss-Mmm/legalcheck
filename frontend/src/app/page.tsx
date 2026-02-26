@@ -21,7 +21,12 @@ export default function Home() {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -105,7 +110,7 @@ export default function Home() {
     }
   };
 
-  if (status === "loading") {
+  if (!mounted || status === "loading") {
     return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Loading...</div>;
   }
 
@@ -271,8 +276,7 @@ export default function Home() {
                   <div ref={messagesEndRef} />
                 </div>
 
-                {/* Input Form */}
-                <div className="w-full mt-4 bg-gray-900 sticky bottom-0 z-10 py-4">
+                <div className="flex-shrink-0 w-full mt-4 bg-gray-900 pb-10">
                   <form onSubmit={handleCheck} className="relative group w-full">
                     <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl blur opacity-25 transition duration-1000 group-focus-within:opacity-50 group-hover:opacity-50"></div>
                     <div className="relative flex items-center bg-gray-900 rounded-2xl p-1 border border-gray-700/50 shadow-2xl">
@@ -296,7 +300,7 @@ export default function Home() {
                 </div>
               </>
             ) : (
-              <div className="flex-grow flex flex-col h-full overflow-hidden">
+              <div className="flex-grow flex flex-col h-full overflow-hidden pb-4">
                 <form onSubmit={handleSearch} className="mb-4 flex gap-2 flex-shrink-0">
                   <input
                     type="text"
