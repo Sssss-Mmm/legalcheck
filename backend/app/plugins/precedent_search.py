@@ -1,41 +1,75 @@
-def search_precedents(keywords: list[str]) -> list[dict]:
+import os
+import urllib.request
+import urllib.parse
+import xml.etree.ElementTree as ET
+
+# Load API Key from environment or use the one provided by user
+API_KEY = os.environ.get("LAW_GO_KR_API_KEY", "0d61d99fc6869f68a814c2cf2b2ab6f232f6e2b2e7e2554ba04b7ac61c6c10f4")
+
+def search_precedents(keywords: list) -> list:
     """
-    판례 또는 노동위원회 재결례를 검색하는 플러그인 (현재는 Mock 데이터 반영)
-    추후 Open API 또는 Vector DB에서 가져오도록 확장.
+    국가법령정보센터(LAW.GO.KR) Open API를 활용하여 실제 판례/법령해석례를 검색합니다.
+    (law.go.kr 대신 스크린샷에 명시된 data.go.kr 엔드포인트 적용)
     """
+    if not keywords:
+        return []
     
-    # Mocking a response for demonstration
-    mock_db = {
-        "부당해고": [
-            {
-                "case_number": "대법원 2012다14618",
-                "summary": "서면통지 의무를 위반한 해고는 그 사유를 묻지 않고 무효이다. 이메일이나 문자메시지로만 통보한 해고도 효력이 없음을 명시한 판례."
-            },
-            {
-                "case_number": "중앙노동위원회 2021부해490",
-                "summary": "수습기간 중이라 하더라도 객관적이고 합리적인 평가 근거 없이 본채용을 거부하는 것은 부당해고에 해당한다."
-            }
-        ],
-        "임금체불": [
-            {
-                "case_number": "대법원 2018도15783",
-                "summary": "퇴직 후 14일 이내에 지급하지 않은 임금 및 퇴직금에 대하여, 사업주의 고의성이 인정되어 근로기준법 위반으로 처벌받은 사례."
-            }
-        ]
-    }
+    query = " ".join(keywords)
+    encoded_query = urllib.parse.quote(query)
+    
+    # 스크린샷의 End Point 적용
+    base_url = "https://apis.data.go.kr/1170000/law"
+    
+    # 스크린샷 메뉴에 명시된 법령해석례(expcSearchList.do) 또는 판례(precSearchList.do) 호출
+    search_url = f"{base_url}/precSearchList.do?serviceKey={API_KEY}&target=prec&type=XML&query={encoded_query}&display=3"
     
     results = []
-    
-    for kw in keywords:
-        for key, value in mock_db.items():
-            if kw in key or key in kw:
-                results.extend(value)
-                break
-                
-    # 중복 제거
-    unique_cases = {r["case_number"]: r for r in results}.values()
-    
-    if not unique_cases:
-        return [{"case_number": "검색 결과 없음", "summary": f"입력하신 키워드({', '.join(keywords)})와 일치하는 주요 판례를 찾지 못했습니다. 관련 조문을 위주로 확인하시기 바랍니다."}]
+    try:
+        req = urllib.request.Request(search_url)
+        with urllib.request.urlopen(req) as response:
+            xml_data = response.read().decode('utf-8')
+            
+        root = ET.fromstring(xml_data)
         
-    return list(unique_cases)
+        for prec in root.findall('.//prec'):
+            prec_no = prec.findtext('판례일련번호')
+            case_name = prec.findtext('사건명')
+            case_no = prec.findtext('사건번호')
+            court = prec.findtext('선고국가') 
+            if not court:
+                court = prec.findtext('선고법원')
+            date = prec.findtext('선고일자')
+            
+            # 상세조회 API (목록에 없을 경우 본문 활용)
+            detail_url = f"{base_url}/precService.do?serviceKey={API_KEY}&target=prec&ID={prec_no}&type=XML"
+            
+            try:
+                with urllib.request.urlopen(detail_url) as detail_response:
+                    detail_xml = detail_response.read().decode('utf-8')
+                detail_root = ET.fromstring(detail_xml)
+            except urllib.error.HTTPError:
+                detail_root = root # Fallback
+            
+            prec_info = detail_root.findtext('.//판결요지', '')
+            if not prec_info or prec_info.strip() == "":
+                prec_info = detail_root.findtext('.//판례내용', '')
+                
+            if prec_info and len(prec_info) > 1000:
+                prec_info = prec_info[:1000] + "...(중략)"
+                
+            results.append({
+                "사건명": case_name,
+                "사건번호": f"{court} {date} 선고 {case_no}",
+                "판결요지": prec_info.strip() if prec_info else "내용 없음"
+            })
+            
+    except Exception as e:
+        print(f"Error fetching precedent from DATA.GO.KR: {e}")
+        # API 인증 대기(1~2시간) 혹은 네트워크 오류 시 Fallback
+        results.append({
+            "사건명": f"판례 검색 대기 (키워드: {query})",
+            "사건번호": "데이터포털 연동 중",
+            "판결요지": f"공공데이터포털 API 연동 대기 중이거나 해당 스펙을 지원하지 않습니다. 에러내용: {e}"
+        })
+            
+    return results

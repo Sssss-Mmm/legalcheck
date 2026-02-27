@@ -6,7 +6,7 @@ from app.models import User, ChatSession, ChatMessage, ClaimCheck, VerdictEnum, 
 from app.schemas import LoginPayload, UserResponse, CheckRequest
 from app.core.database import get_db
 from app.services.rag_service import LegalFactChecker
-from app.services.hook_service import InputAnalyzer
+from app.services.hook_service import InputAnalyzer, OutputValidator
 from app.services.agent_service import RoutingAgent
 from app.plugins.precedent_search import search_precedents
 from app.plugins.calculator import calculate_dismissal_notice_allowance, calculate_severance_pay
@@ -16,6 +16,7 @@ router = APIRouter()
 checker = LegalFactChecker()
 analyzer = InputAnalyzer()
 agent = RoutingAgent()
+validator = OutputValidator()
 
 @router.get("/")
 def read_root():
@@ -111,10 +112,13 @@ async def check_fact(request: CheckRequest, user_id: int, db: Session = Depends(
         plugin_context=plugin_context
     )
     
-    parsed_result = result["result"]
-    verdict_str = parsed_result.get("verdict", "ERROR").upper()
+    raw_parsed_result = result["result"]
+    verdict_str = raw_parsed_result.get("verdict", "ERROR").upper()
     
-    # Map the new 5-step fields to variables
+    # 6. Output Hook: Validate and Correct
+    parsed_result = await validator.validate_and_correct(raw_parsed_result)
+    
+    # Map the new 5-step fields to variables (using the SAFE corrected result)
     summary_str = parsed_result.get("section_1_summary", "")
     explanation = parsed_result.get("section_2_law_explanation", "")
     example_case = parsed_result.get("section_3_real_case_example", "")
