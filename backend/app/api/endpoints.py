@@ -8,6 +8,8 @@ from app.core.database import get_db
 from app.services.rag_service import LegalFactChecker
 from app.services.hook_service import InputAnalyzer
 from app.services.agent_service import RoutingAgent
+from app.plugins.precedent_search import search_precedents
+from app.plugins.calculator import calculate_dismissal_notice_allowance, calculate_severance_pay
 import json
 
 router = APIRouter()
@@ -85,14 +87,28 @@ async def check_fact(request: CheckRequest, user_id: int, db: Session = Depends(
     # 2. Agent: Decide necessary actions based on intent
     agent_decision = await agent.decide_action(intent_analysis)
 
+    plugin_context = ""
     # 3. Add keywords to query if it's a legal question
     search_query = request.query
     if intent_analysis.get("is_legal_question") and intent_analysis.get("keywords"):
         search_query += " " + " ".join(intent_analysis["keywords"])
 
-    # 4. Get RAG response using the enriched query
-    # (In the future, we will branch here based on agent_decision.requires_calculator, etc.)
-    result = await checker.check_fact_with_history(search_query, history)
+    # 4. Execute plugins based on agent decision
+    if agent_decision.get("requires_precedent_search") and intent_analysis.get("keywords"):
+        precedents = search_precedents(intent_analysis["keywords"])
+        plugin_context += "\n[관련 판례/재결례 정보]\n" + json.dumps(precedents, ensure_ascii=False) + "\n"
+
+    if agent_decision.get("requires_calculator"):
+        # Very naive implementation for demonstration: extracting a hardcoded salary if we could, 
+        # but here we just append the calculation logic directly so the LLM can use the formulas or references 
+        # For a full implementation, we'd use LLM to extract salary/days from `request.query` first.
+        plugin_context += "\n[수당 계산기 참고 정보]\n해고예고수당: 월급 ÷ 209 × 8 × 30\n퇴직금: (월급 × 3 ÷ 90) × 30 × (근무일수 ÷ 365)\n사용자가 명시한 금액이 있다면 위 공식으로 검증하세요.\n"
+
+    # 5. Get RAG response using the enriched query
+    # Pass the plugin_context to the checker if we modify checker to accept it, 
+    # OR we just append it to the search_query so history_aware_retriever can see it.
+    enhanced_query = search_query + "\n\n" + plugin_context
+    result = await checker.check_fact_with_history(enhanced_query, history)
     
     parsed_result = result["result"]
     verdict_str = parsed_result.get("verdict", "ERROR").upper()
