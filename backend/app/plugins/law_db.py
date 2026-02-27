@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 
 API_KEY = os.environ.get("LAW_GO_KR_API_KEY", "0d61d99fc6869f68a814c2cf2b2ab6f232f6e2b2e7e2554ba04b7ac61c6c10f4")
 
-def search_law_articles(law_name: str, keyword: str = "") -> list:
+def search_law_articles(law_name: str, keyword: str = "", limit: int = 3) -> list:
     """
     국가법령정보센터 Open API를 사용하여 특정 법령(예: 근로기준법)의 내용을 검색하거나
     키워드에 맞는 조문을 동적으로 추출합니다.
@@ -15,7 +15,8 @@ def search_law_articles(law_name: str, keyword: str = "") -> list:
     
     # 1. 법령 기본 정보 및 ID 조회 (스크린샷 NO 1: 법령정보 목록 조회 /lawSearchList.do)
     base_url = "https://apis.data.go.kr/1170000/law"
-    search_url = f"{base_url}/lawSearchList.do?serviceKey={API_KEY}&target=law&type=XML&query={encoded_law}"
+    # 활용가이드 스크린샷에 명시된 필수 파라미터(numOfRows, pageNo) 추가
+    search_url = f"{base_url}/lawSearchList.do?serviceKey={API_KEY}&target=law&type=XML&query={encoded_law}&numOfRows={limit}&pageNo=1"
     
     results = []
     try:
@@ -30,10 +31,14 @@ def search_law_articles(law_name: str, keyword: str = "") -> list:
         if law is None:
             return []
             
-        law_id = law.findtext('법령일련번호')
-        
-        # 2. 법령 상세 조회 (API 구조상 상세조회는 보통 별도로 구성됨. 서비스 목록에 없으나 통상 사용되는 lawService 연동)
-        detail_url = f"{base_url}/lawService.do?serviceKey={API_KEY}&target=law&MST={law_id}&type=XML"
+        # 법령 상세링크 추출 (data.go.kr 게이트웨이는 목록만 제공하므로 상세는 링크를 타고 들어감)
+        detail_link = law.findtext('법령상세링크')
+        if not detail_link:
+            return []
+            
+        # 2. 법령 상세 조회 (제공된 링크에서 type을 XML로 변경)
+        detail_link = detail_link.replace('type=HTML', 'type=XML')
+        detail_url = f"https://www.law.go.kr{detail_link}"
         
         # 만약 상세조회 API 경로가 다를 수 있으므로 예외 처리
         try:
@@ -62,14 +67,14 @@ def search_law_articles(law_name: str, keyword: str = "") -> list:
                 continue
                 
             results.append({
-                "법령명": law_name,
+                "법령명": root.findtext('.//법령명한글', law_name), # 실제 반환된 법령명 사용
                 "조문번호": jo_num,
                 "조문제목": jo_title,
                 "조문내용": full_content.strip()
             })
             
-            # API 호출 지연 방지를 위해 최대 3~5개 조문만 발췌
-            if len(results) >= 3:
+            # API 호출 지연 방지를 위해 지정된 limit 개수만큼만 발췌
+            if len(results) >= limit:
                 break
                 
     except Exception as e:

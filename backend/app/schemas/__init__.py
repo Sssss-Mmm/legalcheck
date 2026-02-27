@@ -66,6 +66,7 @@ class CheckRequest(BaseModel):
     query: str
     session_id: Optional[int] = None
     options: Optional[dict] = None
+    image_data: Optional[str] = None # Base64 encoded image
 
 # --- Law Models Export ---
 from .law import (

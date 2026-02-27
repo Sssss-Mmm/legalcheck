@@ -17,11 +17,12 @@ def search_precedents(keywords: list) -> list:
     query = " ".join(keywords)
     encoded_query = urllib.parse.quote(query)
     
-    # 스크린샷의 End Point 적용
-    base_url = "https://apis.data.go.kr/1170000/law"
+    # data.go.kr 법령 API는 target=law (공공데이터포털) 만 지원하므로 
+    # 판례 검색은 기존 법제처 DRF API (sapphire_5 퍼블릭 아이디 사용)로 우회합니다.
+    base_url = "https://www.law.go.kr/DRF"
     
-    # 스크린샷 메뉴에 명시된 법령해석례(expcSearchList.do) 또는 판례(precSearchList.do) 호출
-    search_url = f"{base_url}/precSearchList.do?serviceKey={API_KEY}&target=prec&type=XML&query={encoded_query}&display=3"
+    # 판례(prec) 호출
+    search_url = f"{base_url}/lawSearch.do?OC=sapphire_5&target=prec&type=XML&query={encoded_query}&display=3"
     
     results = []
     try:
@@ -41,7 +42,13 @@ def search_precedents(keywords: list) -> list:
             date = prec.findtext('선고일자')
             
             # 상세조회 API (목록에 없을 경우 본문 활용)
-            detail_url = f"{base_url}/precService.do?serviceKey={API_KEY}&target=prec&ID={prec_no}&type=XML"
+            detail_link = prec.findtext('판례상세링크')
+            
+            if detail_link:
+                detail_link = detail_link.replace('type=HTML', 'type=XML')
+                detail_url = f"https://www.law.go.kr{detail_link}"
+            else:
+                detail_url = f"{base_url}/lawService.do?OC=sapphire_5&target=prec&ID={prec_no}&type=XML"
             
             try:
                 with urllib.request.urlopen(detail_url) as detail_response:

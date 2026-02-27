@@ -14,6 +14,7 @@ interface ChatMessage {
   section_4_caution?: string;
   section_5_counseling_recommendation?: string;
   sources?: string[];
+  attached_image?: string; // Base64 selected image preview
 }
 
 export default function Home() {
@@ -24,7 +25,23 @@ export default function Home() {
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert("이미지 크기는 5MB 이하여야 합니다.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSelectedImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -63,8 +80,10 @@ export default function Home() {
     if (!query || !session?.user) return;
 
     const userQuery = query;
+    const currentImage = selectedImage;
     setQuery("");
-    setChatHistory((prev) => [...prev, { role: "user", content: userQuery }]);
+    setSelectedImage(null);
+    setChatHistory((prev) => [...prev, { role: "user", content: userQuery, attached_image: currentImage || undefined }]);
     setLoading(true);
 
     try {
@@ -74,7 +93,11 @@ export default function Home() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ query: userQuery, session_id: sessionId }),
+        body: JSON.stringify({
+          query: userQuery,
+          session_id: sessionId,
+          image_data: currentImage
+        }),
       });
 
       const data = await response.json();
@@ -212,7 +235,14 @@ export default function Home() {
                           }`}>
 
                           {msg.role === "user" ? (
-                            <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                            <div>
+                              {msg.attached_image && (
+                                <div className="mb-3">
+                                  <img src={msg.attached_image} alt="User attachment" className="max-w-xs rounded-xl shadow-sm border border-indigo-400" />
+                                </div>
+                              )}
+                              <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                            </div>
                           ) : (
                             <div className="flex flex-col space-y-4">
                               {/* Rendering parsed AI Response */}
@@ -304,15 +334,35 @@ export default function Home() {
                 </div>
 
                 <div className="flex-shrink-0 w-full mt-4 bg-gray-900 pb-10">
+                  {selectedImage && (
+                    <div className="mb-3 relative inline-block">
+                      <img src={selectedImage} alt="Preview" className="h-20 w-20 object-cover rounded-xl border-2 border-indigo-500 shadow-md" />
+                      <button
+                        onClick={() => setSelectedImage(null)}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center shadow hover:bg-red-600 font-bold"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
                   <form onSubmit={handleCheck} className="relative group w-full">
                     <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl blur opacity-25 transition duration-1000 group-focus-within:opacity-50 group-hover:opacity-50"></div>
                     <div className="relative flex items-center bg-gray-900 rounded-2xl p-1 border border-gray-700/50 shadow-2xl">
+
+                      {/* Image Upload Button */}
+                      <label className="cursor-pointer text-gray-400 hover:text-indigo-400 p-3 transition-colors">
+                        <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
+                        </svg>
+                      </label>
+
                       <input
                         type="text"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
-                        placeholder="질문을 입력하세요..."
-                        className="flex-grow bg-transparent text-white placeholder-gray-500 px-6 py-4 focus:outline-none"
+                        placeholder="질문을 입력하세요... (계약서, 명세서 등 이미지 첨부 가능)"
+                        className="flex-grow bg-transparent text-white placeholder-gray-500 px-3 py-4 focus:outline-none"
                         disabled={loading}
                       />
                       <button
