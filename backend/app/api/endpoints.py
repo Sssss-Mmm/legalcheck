@@ -39,7 +39,8 @@ def search_articles(query: str = Query(..., description="검색할 키워드"), 
     from app.plugins.law_db import search_law_articles
     
     # 1. 실시간 데이터포털 API를 통해 먼저 상위 법령(예: '주택', '근로기준법')으로 검색 시도
-    api_results = search_law_articles(law_name=query, keyword="", limit=10)
+    # 법률, 시행령, 시행규칙 당 최대 50개의 조문을 가져와 광범위한 검색결과 제공
+    api_results = search_law_articles(law_name=query, keyword="", limit=50)
     
     results = []
     
