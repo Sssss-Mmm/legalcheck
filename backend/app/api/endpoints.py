@@ -6,10 +6,12 @@ from app.models import User, ChatSession, ChatMessage, ClaimCheck, VerdictEnum, 
 from app.schemas import LoginPayload, UserResponse, CheckRequest
 from app.core.database import get_db
 from app.services.rag_service import LegalFactChecker
+from app.services.hook_service import InputAnalyzer
 import json
 
 router = APIRouter()
 checker = LegalFactChecker()
+analyzer = InputAnalyzer()
 
 @router.get("/")
 def read_root():
@@ -75,8 +77,16 @@ async def check_fact(request: CheckRequest, user_id: int, db: Session = Depends(
     db.add(user_msg)
     db.commit()
 
-    # Get RAG response
-    result = await checker.check_fact_with_history(request.query, history)
+    # 1. Input Hook: Analyze query intent
+    intent_analysis = await analyzer.analyze_query(request.query)
+    
+    # 2. Add keywords to query if it's a legal question
+    search_query = request.query
+    if intent_analysis.get("is_legal_question") and intent_analysis.get("keywords"):
+        search_query += " " + " ".join(intent_analysis["keywords"])
+
+    # 3. Get RAG response using the enriched query
+    result = await checker.check_fact_with_history(search_query, history)
     
     parsed_result = result["result"]
     verdict_str = parsed_result.get("verdict", "ERROR").upper()
@@ -138,5 +148,6 @@ async def check_fact(request: CheckRequest, user_id: int, db: Session = Depends(
     return {
         "session_id": session_id,
         "result": parsed_result,
-        "sources": sources
+        "sources": sources,
+        "intent_analysis": intent_analysis
     }
