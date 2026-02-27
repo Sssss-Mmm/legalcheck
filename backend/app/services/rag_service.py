@@ -7,12 +7,15 @@ from langchain_classic.chains import create_history_aware_retriever, create_retr
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from pydantic import BaseModel, Field
 import os
+from app.services.context_service import ContextCompressor
 
 class FactCheckResult(BaseModel):
-    verdict: str = Field(description="판정 결과: 'TRUE', 'PARTIAL', 'FALSE' 중 하나")
-    explanation: str = Field(description="관련 법 이름 및 조항 번호, 그리고 해당 조항에 대한 쉬운 해석 (3~5줄 이내)")
-    example_case: str = Field(description="일반인이 이해할 수 있는 구체적인 사례")
-    caution_note: str = Field(description="예외 상황, 오해하기 쉬운 부분, 분쟁 가능성 관련 주의사항")
+    verdict: str = Field(description="판정 결과: '사실', '일부 사실', '사실 아님', '추가 판단 필요' 중 하나")
+    section_1_summary: str = Field(description="1️⃣ 핵심 요약 (3~5줄 이내)")
+    section_2_law_explanation: str = Field(description="2️⃣ 법 조문 기준 설명 (관련 법 이름, 조항 번호, 쉬운 해석)")
+    section_3_real_case_example: str = Field(description="3️⃣ 현실 적용 예시 (일반인이 이해할 수 있는 사례)")
+    section_4_caution: str = Field(description="4️⃣ 주의사항 (예외 상황, 오해하기 쉬운 부분, 분쟁 가능성)")
+    section_5_counseling_recommendation: str = Field(description="5️⃣ 법률 상담 권장 여부 (필요시 '정확한 판단은 노무사/변호사 상담이 필요합니다.' 명시)")
 
 class LegalFactChecker:
     def __init__(self):
@@ -21,6 +24,7 @@ class LegalFactChecker:
         self.vector_store = None
         self.llm = ChatOpenAI(model="gpt-4o")
         self.parser = JsonOutputParser(pydantic_object=FactCheckResult)
+        self.compressor = ContextCompressor()
 
 
     def initialize_vector_store(self):
@@ -48,7 +52,7 @@ class LegalFactChecker:
         if docs:
             self.vector_store.add_documents(docs)
 
-    async def check_fact(self, query: str):
+    async def check_fact(self, query: str, plugin_context: str = ""):
         if not self.vector_store:
             self.initialize_vector_store()
             
@@ -59,21 +63,32 @@ class LegalFactChecker:
         retriever = self.vector_store.as_retriever(search_kwargs={"k": 3})
         docs = await retriever.ainvoke(query)
         
-        # 2. Construct prompt
-        context = "\n\n".join([d.metadata.get("original_text", d.page_content) for d in docs])
+        # 2. Compress context
+        compressed_context = await self.compressor.compress_documents(query, docs)
         
-        system_prompt = """당신은 '법률/규정 기반 팩트체커'입니다.
-당신은 한국 노동법(근로기준법) 및 규정 해석에 강점이 있는 법률 전문가이자 IT 지식도 갖춘 페르소나를 가집니다.
+        if plugin_context:
+            compressed_context += f"\n\n{plugin_context}"
+        
+        system_prompt = """당신은 한국 노동법(근로기준법) 및 규정 해석에 강점이 있는 IT 법률 팩트체커입니다.
 당신의 목표는 법률적 사실을 비전문가인 일반인에게 정확하고, 명확하고, 안전하게 설명하는 것입니다.
 
-**핵심 원칙:**
-1. **명확성 & 단순성**: 법률 용어는 피하거나 즉시 풀어서 설명하세요. 복잡한 문장보다 짧고 명료한 문장을 사용하세요.
-2. **사실에 기반**: 법 조문 내용, 일반적 해석, 판례, 실무 사례를 명확히 구분하세요. 개인적 의견을 사실처럼 말하지 마세요.
-3. **출처 명시**: 근거가 되는 법령명과 조항(예: 근로기준법 제36조)을 정확히 언급하세요.
-4. **안전 제일**: 확정적인 소송 조언이나 결과를 예단하지 마세요. 불법적인 행동을 조장하지 마세요.
+**Explanation Structure (MANDATORY)**
+Every explanation must follow exactly this JSON structure mapped by the instructions:
+1️⃣ 핵심 요약 (3~5줄 이내)
+2️⃣ 법 조문 기준 설명 (관련 법 이름, 조항 번호, 쉬운 해석)
+3️⃣ 현실 적용 예시 (일반인이 이해할 수 있는 사례)
+4️⃣ 주의사항 (예외 상황, 오해하기 쉬운 부분, 분쟁 가능성)
+5️⃣ 법률 상담 권장 여부 (실제 소송/분쟁 가능성이 있다면 "정확한 판단은 노무사/변호사 상담이 필요합니다." 명시)
+
+**Language & Tone Rules:**
+- Clear. Simple. Accurate. Calm. No legal jargon without explanation.
+- Avoid Latin legal terms and unnecessary jargon. Keep sentences short.
+- Never give definitive litigation advice. Never predict court outcome with certainty.
+- Always clarify that information is for general guidance.
+- 감정적 위로 금지. 사실 확인과 정보 제공에만 집중하세요.
 
 **답변 형식:**
-반드시 아래의 지시사항에 따라 JSON 형태로 출력하세요.
+반드시 아래의 지시사항에 따라 JSON 형태로만 출력하세요.
 
 {format_instructions}
 
@@ -91,7 +106,7 @@ class LegalFactChecker:
         # 3. Call LLM
         chain = prompt | self.llm | self.parser
         response = await chain.ainvoke({
-            "context": context, 
+            "context": compressed_context, 
             "query": query,
             "format_instructions": self.parser.get_format_instructions()
         })
@@ -102,7 +117,7 @@ class LegalFactChecker:
             "revision_ids": [d.metadata.get("revision_id") for d in docs if "revision_id" in d.metadata]
         }
 
-    async def check_fact_with_history(self, query: str, chat_history: list):
+    async def check_fact_with_history(self, query: str, chat_history: list, plugin_context: str = ""):
         if not self.vector_store:
             self.initialize_vector_store()
             
@@ -137,15 +152,23 @@ class LegalFactChecker:
             self.llm, retriever, contextualize_q_prompt
         )
 
-        qa_system_prompt = """당신은 '법률/규정 기반 팩트체커'입니다.
-당신은 한국 노동법(근로기준법) 및 규정 해석에 강점이 있는 법률 전문가이자 IT 지식도 갖춘 페르소나를 가집니다.
+        qa_system_prompt = """당신은 한국 노동법(근로기준법) 및 규정 해석에 강점이 있는 IT 법률 팩트체커입니다.
 당신의 목표는 법률적 사실을 비전문가인 일반인에게 정확하고, 명확하고, 안전하게 설명하는 것입니다.
 
-**핵심 원칙:**
-1. **명확성 & 단순성**: 법률 용어는 피하거나 즉시 풀어서 설명하세요. 복잡한 문장보다 짧고 명료한 문장을 사용하세요.
-2. **사실에 기반**: 법 조문 내용, 일반적 해석, 판례, 실무 사례를 명확히 구분하세요. 개인적 의견을 사실처럼 말하지 마세요.
-3. **출처 명시**: 근거가 되는 법령명과 조항(예: 근로기준법 제36조)을 정확히 언급하세요.
-4. **안전 제일**: 확정적인 소송 조언이나 결과를 예단하지 마세요. 불법적인 행동을 조장하지 마세요.
+**Explanation Structure (MANDATORY)**
+Every explanation must follow exactly this JSON structure mapped by the instructions:
+1️⃣ 핵심 요약 (3~5줄 이내)
+2️⃣ 법 조문 기준 설명 (관련 법 이름, 조항 번호, 쉬운 해석)
+3️⃣ 현실 적용 예시 (일반인이 이해할 수 있는 사례)
+4️⃣ 주의사항 (예외 상황, 오해하기 쉬운 부분, 분쟁 가능성)
+5️⃣ 법률 상담 권장 여부 (실제 소송/분쟁 가능성이 있다면 "정확한 판단은 노무사/변호사 상담이 필요합니다." 명시)
+
+**Language & Tone Rules:**
+- Clear. Simple. Accurate. Calm. No legal jargon without explanation.
+- Avoid Latin legal terms and unnecessary jargon. Keep sentences short.
+- Never give definitive litigation advice. Never predict court outcome with certainty.
+- Always clarify that information is for general guidance.
+- 감정적 위로 금지. 사실 확인과 정보 제공에만 집중하세요.
 
 **답변 형식:**
 반드시 아래의 지시사항에 따라 JSON 형태로 출력하세요. 출력 언어는 한국어입니다.
@@ -167,11 +190,23 @@ class LegalFactChecker:
         )
         
         question_answer_chain = create_stuff_documents_chain(self.llm, qa_prompt)
-        rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
 
-        response = await rag_chain.ainvoke({
+        # Retrieve documents manually
+        docs = await history_aware_retriever.ainvoke({"input": query, "chat_history": formatted_history})
+        
+        # Compress context
+        compressed_context = await self.compressor.compress_documents(query, docs)
+        
+        if plugin_context:
+            compressed_context += f"\n\n{plugin_context}"
+            
+        from langchain_core.documents import Document
+        compressed_doc = Document(page_content=compressed_context)
+
+        answer_response = await question_answer_chain.ainvoke({
             "input": query, 
             "chat_history": formatted_history,
+            "context": [compressed_doc],
             "format_instructions": self.parser.get_format_instructions()
         })
         
@@ -180,18 +215,20 @@ class LegalFactChecker:
         # the LLM directly yields a JSON string. We can parse it here.
         try:
             import json
-            parsed_answer = json.loads(response["answer"])
+            parsed_answer = json.loads(answer_response)
         except Exception:
             # Fallback if the LLM output something invalid
             parsed_answer = {
                 "verdict": "ERROR",
-                "explanation": response["answer"],
-                "example_case": "N/A",
-                "caution_note": "N/A"
+                "section_1_summary": str(answer_response),
+                "section_2_law_explanation": "응답 처리 오류 발생",
+                "section_3_real_case_example": "N/A",
+                "section_4_caution": "N/A",
+                "section_5_counseling_recommendation": "N/A"
             }
         
         return {
             "result": parsed_answer,
-            "sources": [d.metadata.get("source", "Unknown") for d in response["context"]],
-            "revision_ids": [d.metadata.get("revision_id") for d in response["context"] if "revision_id" in d.metadata]
+            "sources": [d.metadata.get("source", "Unknown") for d in docs],
+            "revision_ids": [d.metadata.get("revision_id") for d in docs if "revision_id" in d.metadata]
         }

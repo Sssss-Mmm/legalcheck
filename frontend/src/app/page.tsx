@@ -8,9 +8,11 @@ interface ChatMessage {
   content: string; // Used for user input or raw text
   // AI JSON response fields:
   verdict?: string;
-  explanation?: string;
-  example_case?: string;
-  caution_note?: string;
+  section_1_summary?: string;
+  section_2_law_explanation?: string;
+  section_3_real_case_example?: string;
+  section_4_caution?: string;
+  section_5_counseling_recommendation?: string;
   sources?: string[];
 }
 
@@ -87,9 +89,11 @@ export default function Home() {
             role: "ai",
             content: "",
             verdict: data.result?.verdict || "ERROR",
-            explanation: data.result?.explanation || "응답을 생성할 수 없습니다.",
-            example_case: data.result?.example_case,
-            caution_note: data.result?.caution_note,
+            section_1_summary: data.result?.section_1_summary || "응답을 생성할 수 없습니다.",
+            section_2_law_explanation: data.result?.section_2_law_explanation,
+            section_3_real_case_example: data.result?.section_3_real_case_example,
+            section_4_caution: data.result?.section_4_caution,
+            section_5_counseling_recommendation: data.result?.section_5_counseling_recommendation,
             sources: data.sources
           },
         ]);
@@ -218,29 +222,52 @@ export default function Home() {
                                 </div>
                               )}
 
-                              {msg.explanation ? (
-                                <div className="text-gray-200 leading-relaxed whitespace-pre-wrap text-[15px]">
-                                  {msg.explanation}
+                              {msg.section_1_summary ? (
+                                <div className="text-gray-100 font-medium leading-relaxed whitespace-pre-wrap text-[16px] mb-2 p-3 bg-gray-900/60 rounded-xl border border-gray-700/50">
+                                  <h4 className="text-sm text-indigo-300 font-bold mb-1 flex items-center">
+                                    <span className="mr-2">📝</span>핵심 요약
+                                  </h4>
+                                  {msg.section_1_summary}
                                 </div>
                               ) : (
                                 <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                               )}
 
-                              {msg.example_case && (
-                                <div className="bg-gray-900/50 p-3 rounded-lg border border-gray-700/30">
-                                  <h4 className="text-sm text-indigo-400 font-bold mb-1 flex items-center">
-                                    <span className="mr-2">💡</span>현실 적용 사례
+                              {msg.section_2_law_explanation && (
+                                <div className="text-gray-300 leading-relaxed whitespace-pre-wrap text-[15px] pt-2">
+                                  <h4 className="text-sm text-blue-300 font-bold mb-1 flex items-center">
+                                    <span className="mr-2">⚖️</span>법 조문 기준 설명
                                   </h4>
-                                  <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{msg.example_case}</p>
+                                  <div className="pl-6 border-l-2 border-blue-500/30">
+                                    {msg.section_2_law_explanation}
+                                  </div>
                                 </div>
                               )}
 
-                              {msg.caution_note && (
-                                <div className="bg-red-900/10 p-3 rounded-lg border border-red-900/30">
-                                  <h4 className="text-sm text-red-400 font-bold mb-1 flex items-center">
+                              {msg.section_3_real_case_example && (
+                                <div className="bg-gray-900/40 p-3 rounded-lg border border-gray-700/30 mt-3">
+                                  <h4 className="text-sm text-indigo-400 font-bold mb-1 flex items-center">
+                                    <span className="mr-2">💡</span>현실 적용 예시
+                                  </h4>
+                                  <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{msg.section_3_real_case_example}</p>
+                                </div>
+                              )}
+
+                              {msg.section_4_caution && (
+                                <div className="bg-yellow-900/10 p-3 rounded-lg border border-yellow-700/30 mt-3">
+                                  <h4 className="text-sm text-yellow-500 font-bold mb-1 flex items-center">
                                     <span className="mr-2">⚠️</span>주의사항
                                   </h4>
-                                  <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{msg.caution_note}</p>
+                                  <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{msg.section_4_caution}</p>
+                                </div>
+                              )}
+
+                              {msg.section_5_counseling_recommendation && (
+                                <div className="bg-red-900/10 p-3 rounded-lg border border-red-900/30 mt-3">
+                                  <h4 className="text-sm text-red-400 font-bold mb-1 flex items-center">
+                                    <span className="mr-2">👩‍⚖️</span>전문가 상담 건의
+                                  </h4>
+                                  <p className="text-sm text-red-200/80 leading-relaxed whitespace-pre-wrap">{msg.section_5_counseling_recommendation}</p>
                                 </div>
                               )}
 

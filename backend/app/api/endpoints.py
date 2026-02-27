@@ -105,16 +105,22 @@ async def check_fact(request: CheckRequest, user_id: int, db: Session = Depends(
         plugin_context += "\n[수당 계산기 참고 정보]\n해고예고수당: 월급 ÷ 209 × 8 × 30\n퇴직금: (월급 × 3 ÷ 90) × 30 × (근무일수 ÷ 365)\n사용자가 명시한 금액이 있다면 위 공식으로 검증하세요.\n"
 
     # 5. Get RAG response using the enriched query
-    # Pass the plugin_context to the checker if we modify checker to accept it, 
-    # OR we just append it to the search_query so history_aware_retriever can see it.
-    enhanced_query = search_query + "\n\n" + plugin_context
-    result = await checker.check_fact_with_history(enhanced_query, history)
+    result = await checker.check_fact_with_history(
+        query=search_query, 
+        chat_history=history, 
+        plugin_context=plugin_context
+    )
     
     parsed_result = result["result"]
     verdict_str = parsed_result.get("verdict", "ERROR").upper()
-    explanation = parsed_result.get("explanation", "")
-    example_case = parsed_result.get("example_case", "")
-    caution_note = parsed_result.get("caution_note", "")
+    
+    # Map the new 5-step fields to variables
+    summary_str = parsed_result.get("section_1_summary", "")
+    explanation = parsed_result.get("section_2_law_explanation", "")
+    example_case = parsed_result.get("section_3_real_case_example", "")
+    caution_note = parsed_result.get("section_4_caution", "")
+    counseling = parsed_result.get("section_5_counseling_recommendation", "")
+    
     sources = result.get("sources", [])
     
     # Check for caching if we have revision_ids from the retrieval
@@ -124,13 +130,7 @@ async def check_fact(request: CheckRequest, user_id: int, db: Session = Depends(
     if primary_revision_id:
         cache = db.query(ExplanationCache).filter(ExplanationCache.article_revision_id == primary_revision_id).first()
         if cache:
-            # Overwrite with high-quality cached explanation/examples
-            explanation = cache.plain_summary
-            example_case = cache.example_case
-            caution_note = cache.caution_note
-            parsed_result["explanation"] = explanation
-            parsed_result["example_case"] = example_case
-            parsed_result["caution_note"] = caution_note
+            pass # TODO: handle caching with new schema later
         else:
             # Save new high-quality explanation to cache
             new_cache = ExplanationCache(
@@ -143,9 +143,13 @@ async def check_fact(request: CheckRequest, user_id: int, db: Session = Depends(
             # We don't commit immediately, it'll be committed with the rest
 
     # Map string verdict to Enum
-    try:
-        verdict_enum = VerdictEnum(verdict_str)
-    except ValueError:
+    if "일부 사실" in verdict_str or "PARTIAL" in verdict_str:
+        verdict_enum = VerdictEnum.PARTIAL
+    elif "사실 아님" in verdict_str or "FALSE" in verdict_str:
+        verdict_enum = VerdictEnum.FALSE
+    elif "사실" in verdict_str or "TRUE" in verdict_str:
+        verdict_enum = VerdictEnum.TRUE
+    else:
         verdict_enum = VerdictEnum.PARTIAL # Defaulting on error
 
     # Save ClaimCheck record

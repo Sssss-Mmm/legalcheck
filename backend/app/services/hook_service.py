@@ -3,6 +3,7 @@ from typing import List
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
+import json
 
 class IntentResult(BaseModel):
     intent: str = Field(description="사용자 질문의 핵심 의도 (예: 부당해고 가능성, 체불임금 계산 등)")
@@ -54,3 +55,61 @@ class InputAnalyzer:
                 "is_legal_question": True,
                 "is_counseling_request": False
             }
+
+class OutputValidator:
+    def __init__(self):
+        self.llm = ChatOpenAI(model="gpt-4o-mini", temperature=0) # Use faster/cheaper model for simple correction
+        
+    async def validate_and_correct(self, result: dict) -> dict:
+        """
+        AI가 생성한 답변(FactCheckResult 형태)을 검사하여
+        단정적 표현(100% 이긴다), 감정적 위로, 잘못된 법률 용어 직역이 있는지 확인 후
+        문제가 있으면 안전하고 중립적인 언어로 "교정"하여 반환합니다.
+        """
+        
+        system_prompt = """당신은 법률 팩트체커 시스템의 '최종 출력 검증기(Output Hook)'입니다.
+다음은 AI가 작성한 5단계 법률 팩트체크 초안입니다.
+
+**검사 및 교정 규칙:**
+1. **단정적 예측 불가**: "100% 승소합니다", "무조건 이길 수 있습니다", "확실합니다", "불법입니다(법원 판결 전)" 와 같은 단정적인 소송 조언이나 결과를 예단하는 표현이 있다면, "승소/인정될 가능성이 있습니다", "위법 소지가 있습니다", "구체적인 판단은 전문가 상담이 필요합니다" 등으로 **교정**하세요.
+2. **법률용어 순화**: 불필요한 라틴어 법률 용어나 너무 어려운 전문 용어가 설명 없이 쓰였다면 쉬운 한국어로 **교정**하세요.
+3. **감정적 동요 제거**: "너무 억울하시겠습니다", "힘내세요" 등 감정적 위로나 공감이 섞인 문장이 있다면 해당 부분을 **삭제**하세요. (사실 확인만 남기세요)
+4. **구조 유지**: 입력된 5단계 JSON 구조(키 값)를 정확히 유지해야 합니다.
+5. **문제 없음 통과**: 위의 규칙에 위반되는 사항이 없다면, 원본 텍스트를 그대로 유지하세요.
+
+반드시 원본과 동일한 JSON 키를 가진 순수 JSON 객체로 응답하세요. Markdown 블록(```json 등)없이 순수 JSON 문자열만 반환하세요.
+"""
+        
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("user", "다음 초안을 검증 및 교정하세요.\n\n{draft}")
+        ])
+        
+        # We enforce JSON output directly by prompt
+        chain = prompt | self.llm
+        
+        try:
+            draft_json = json.dumps(result, ensure_ascii=False)
+            response = await chain.ainvoke({
+                "draft": draft_json
+            })
+            
+            # Parse the response (handling potential markdown blocks just in case)
+            corrected_text = response.content.strip()
+            if corrected_text.startswith("```json"):
+                corrected_text = corrected_text[7:-3].strip()
+            elif corrected_text.startswith("```"):
+                corrected_text = corrected_text[3:-3].strip()
+                
+            corrected_json = json.loads(corrected_text)
+            
+            # Ensure the verdict field wasn't dropped
+            if "verdict" not in corrected_json and "verdict" in result:
+                corrected_json["verdict"] = result["verdict"]
+                
+            return corrected_json
+            
+        except Exception as e:
+            print(f"Output Validation failed: {e}")
+            # Fallback to the original output if validation chain fails
+            return result
