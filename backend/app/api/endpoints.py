@@ -7,11 +7,13 @@ from app.schemas import LoginPayload, UserResponse, CheckRequest
 from app.core.database import get_db
 from app.services.rag_service import LegalFactChecker
 from app.services.hook_service import InputAnalyzer
+from app.services.agent_service import RoutingAgent
 import json
 
 router = APIRouter()
 checker = LegalFactChecker()
 analyzer = InputAnalyzer()
+agent = RoutingAgent()
 
 @router.get("/")
 def read_root():
@@ -80,12 +82,16 @@ async def check_fact(request: CheckRequest, user_id: int, db: Session = Depends(
     # 1. Input Hook: Analyze query intent
     intent_analysis = await analyzer.analyze_query(request.query)
     
-    # 2. Add keywords to query if it's a legal question
+    # 2. Agent: Decide necessary actions based on intent
+    agent_decision = await agent.decide_action(intent_analysis)
+
+    # 3. Add keywords to query if it's a legal question
     search_query = request.query
     if intent_analysis.get("is_legal_question") and intent_analysis.get("keywords"):
         search_query += " " + " ".join(intent_analysis["keywords"])
 
-    # 3. Get RAG response using the enriched query
+    # 4. Get RAG response using the enriched query
+    # (In the future, we will branch here based on agent_decision.requires_calculator, etc.)
     result = await checker.check_fact_with_history(search_query, history)
     
     parsed_result = result["result"]
@@ -149,5 +155,6 @@ async def check_fact(request: CheckRequest, user_id: int, db: Session = Depends(
         "session_id": session_id,
         "result": parsed_result,
         "sources": sources,
-        "intent_analysis": intent_analysis
+        "intent_analysis": intent_analysis,
+        "agent_decision": agent_decision
     }
