@@ -33,7 +33,34 @@
 
 ---
 
-## 🏗️ 기술 스택 (Tech Stack)
+## �️ 시스템 아키텍처 (System Architecture)
+
+```mermaid
+graph TD
+    User([👨‍💻 사용자]) -->|팩트체크 요청| Frontend[Next.js Frontend<br>(대시보드 / 챗봇 UI)]
+    Frontend -->|OAuth 인증| NextAuth[NextAuth.js<br>Google Login]
+    Frontend -- REST API --> Backend[FastAPI Backend]
+
+    Admin([👮 관리자]) -->|법령 PDF 업로드| Backend
+
+    subgraph Backend System
+        Backend --> RAG[🧠 RAG 파이프라인<br>(LangChain)]
+        Backend --> DataParsing[📄 파싱 엔진<br>(PyPDFLoader + LLM)]
+    end
+
+    RAG -->|검증 및 생성| LLM[OpenAI API<br>(gpt-4o / gpt-4o-mini)]
+    RAG <-->|유사도 문서 검색| VectorDB[(ChromaDB<br>Vector Store)]
+
+    DataParsing -->|법조문 구조화/단편화| DB[(SQLite Database<br>관계형 데이터/캐시)]
+    DataParsing -->|임베딩 저장| VectorDB
+
+    Backend <-->|CRUD 및 캐싱| DB
+    OpenData([🏛️ 공공데이터포털]) -.->|외부 API 통신| Backend
+```
+
+---
+
+## �🏗️ 기술 스택 (Tech Stack)
 
 ### Backend
 - **Framework**: FastAPI (Python 3.11+)
