@@ -19,7 +19,9 @@ interface ChatMessage {
 
 export default function Home() {
   const { data: session, status } = useSession();
-  const [activeTab, setActiveTab] = useState<"chat" | "search">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "search" | "history">("chat");
+  const [popularClaims, setPopularClaims] = useState<string[]>([]);
+  const [sessionHistory, setSessionHistory] = useState<any[]>([]);
   const [query, setQuery] = useState("");
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<number | null>(null);
@@ -45,7 +47,77 @@ export default function Home() {
 
   useEffect(() => {
     setMounted(true);
+    fetchPopularClaims();
   }, []);
+
+  const fetchPopularClaims = async () => {
+    try {
+      const res = await fetch(`http://localhost:8000/claims/popular`);
+      if (res.ok) {
+        const data = await res.json();
+        setPopularClaims(data.popular_claims || []);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchHistory = async () => {
+    if (!session?.user) return;
+    try {
+      const userId = (session.user as any).id;
+      const res = await fetch(`http://localhost:8000/sessions?user_id=${userId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSessionHistory(data.sessions || []);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "history") {
+      fetchHistory();
+    }
+  }, [activeTab, session]);
+
+  const loadSession = async (sid: number) => {
+    if (!session?.user) return;
+    try {
+      const userId = (session.user as any).id;
+      const res = await fetch(`http://localhost:8000/sessions/${sid}?user_id=${userId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSessionId(data.id);
+        setChatHistory(data.messages || []);
+        setActiveTab("chat");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const toggleBookmark = async (sid: number) => {
+    if (!session?.user) return;
+    try {
+      const userId = (session.user as any).id;
+      const res = await fetch(`http://localhost:8000/sessions/${sid}/bookmark?user_id=${userId}`, { method: "POST" });
+      if (res.ok) {
+        // Refresh history if in history tab
+        if (activeTab === "history") fetchHistory();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleShare = (msg: ChatMessage) => {
+    const textToShare = `[법률 팩트체크]\n\n요약: ${msg.section_1_summary || '요약 없음'}\n\n판정: ${msg.verdict || '확인불가'}\n${msg.section_2_law_explanation || ''}\n${msg.section_3_real_case_example || ''}\n${msg.section_4_caution || ''}`;
+    navigator.clipboard.writeText(textToShare).then(() => {
+      alert("결과가 클립보드에 복사되었습니다!");
+    });
+  };
 
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -216,6 +288,12 @@ export default function Home() {
               >
                 조문 검색
               </button>
+              <button
+                onClick={() => setActiveTab("history")}
+                className={`pb-2 px-2 text-sm font-medium transition-colors ${activeTab === "history" ? "text-indigo-400 border-b-2 border-indigo-400" : "text-gray-400 hover:text-gray-200"}`}
+              >
+                내 이력 및 북마크
+              </button>
             </div>
 
             {activeTab === "chat" ? (
@@ -224,7 +302,25 @@ export default function Home() {
                   {chatHistory.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-gray-500">
                       <p>궁금한 법률 질문을 편하게 입력해주세요.</p>
-                      <p className="text-sm mt-2">예: 수습 기간에 해고하면 월급은 어떻게 되나요?</p>
+
+                      {popularClaims.length > 0 && (
+                        <div className="mt-8 overflow-hidden max-w-2xl w-full">
+                          <h4 className="text-sm font-bold text-gray-400 mb-4 flex items-center justify-center">
+                            <span className="mr-2">🔥</span>실시간 인기 팩트체크
+                          </h4>
+                          <div className="flex flex-wrap gap-2 justify-center">
+                            {popularClaims.map((claim, cIdx) => (
+                              <button
+                                key={cIdx}
+                                onClick={() => setQuery(claim)}
+                                className="bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-indigo-500 text-gray-300 px-4 py-2 rounded-full text-sm transition-all shadow-sm"
+                              >
+                                {claim}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     chatHistory.map((msg, idx) => (
@@ -315,6 +411,26 @@ export default function Home() {
                                   </ul>
                                 </div>
                               )}
+
+                              {/* Actions */}
+                              <div className="mt-3 pt-3 flex items-center gap-3 border-t border-gray-700/30">
+                                <button
+                                  onClick={() => handleShare(msg)}
+                                  className="text-xs flex items-center gap-1 text-gray-400 hover:text-indigo-400 transition"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
+                                  공유하기
+                                </button>
+                                {idx === chatHistory.length - 1 && sessionId && (
+                                  <button
+                                    onClick={() => toggleBookmark(sessionId)}
+                                    className="text-xs flex items-center gap-1 text-gray-400 hover:text-yellow-400 transition"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
+                                    세션 북마크
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>
@@ -376,7 +492,7 @@ export default function Home() {
                   </form>
                 </div>
               </>
-            ) : (
+            ) : activeTab === "search" ? (
               <div className="flex-grow flex flex-col h-full overflow-hidden pb-4">
                 <form onSubmit={handleSearch} className="mb-4 flex gap-2 flex-shrink-0">
                   <input
@@ -407,6 +523,41 @@ export default function Home() {
                         <p className="text-gray-300 whitespace-pre-wrap leading-relaxed text-[15px]">
                           {result.content}
                         </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex-grow flex flex-col h-full overflow-hidden pb-4">
+                <h2 className="text-xl font-bold mb-4 text-indigo-300">이전 팩트체크 기록</h2>
+                <div className="flex-grow overflow-y-auto space-y-3 custom-scrollbar pr-2">
+                  {sessionHistory.length === 0 ? (
+                    <div className="text-center text-gray-500 mt-10 flex flex-col items-center">
+                      <svg className="w-16 h-16 text-gray-700 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                      <p>이전 기록이 없습니다.</p>
+                      <p className="text-sm mt-1">대화를 시작하여 팩트체크 기록을 남겨보세요.</p>
+                    </div>
+                  ) : (
+                    sessionHistory.map((sess, idx) => (
+                      <div key={idx} className="bg-gray-800 border border-gray-700/50 hover:border-indigo-500/50 rounded-xl p-4 transition-all group flex justify-between items-center cursor-pointer shadow-sm" onClick={() => loadSession(sess.id)}>
+                        <div className="overflow-hidden pr-4 flex-grow">
+                          <h3 className="text-gray-200 font-medium truncate mb-1">
+                            {sess.title || "새 질문"}
+                          </h3>
+                          <p className="text-xs text-gray-500">
+                            {new Date(sess.updated_at).toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleBookmark(sess.id); }}
+                            className={`p-2 rounded-full transition-colors ${sess.is_bookmarked ? "text-yellow-400 bg-yellow-400/10" : "text-gray-500 hover:text-yellow-400 hover:bg-gray-700"}`}
+                            title="북마크"
+                          >
+                            <svg className="w-5 h-5" fill={sess.is_bookmarked ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
+                          </button>
+                        </div>
                       </div>
                     ))
                   )}

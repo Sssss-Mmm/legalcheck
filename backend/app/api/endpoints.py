@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, desc, func
 
 from app.models import User, ChatSession, ChatMessage, ClaimCheck, VerdictEnum, LawArticleRevision, ExplanationCache, LawArticle, Law
 from app.schemas import LoginPayload, UserResponse, CheckRequest
@@ -227,3 +227,61 @@ async def check_fact(request: CheckRequest, user_id: int, db: Session = Depends(
         "intent_analysis": intent_analysis,
         "agent_decision": agent_decision
     }
+
+@router.get("/sessions")
+def get_user_sessions(user_id: int, db: Session = Depends(get_db)):
+    sessions = db.query(ChatSession).filter(ChatSession.user_id == user_id).order_by(desc(ChatSession.updated_at)).all()
+    return {
+        "sessions": [
+            {
+                "id": s.id,
+                "title": s.title,
+                "is_bookmarked": s.is_bookmarked,
+                "updated_at": s.updated_at
+            } for s in sessions
+        ]
+    }
+
+@router.get("/sessions/{session_id}")
+def get_session_details(session_id: int, user_id: int, db: Session = Depends(get_db)):
+    session = db.query(ChatSession).filter(ChatSession.id == session_id, ChatSession.user_id == user_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at).all()
+    
+    formatted_messages = []
+    for msg in messages:
+        if msg.role == "user":
+            formatted_messages.append({"role": "user", "content": msg.content})
+        else:
+            try:
+                data = json.loads(msg.content)
+                formatted_messages.append({"role": "ai", "content": "", **data})
+            except:
+                formatted_messages.append({"role": "ai", "content": msg.content})
+                
+    return {
+        "id": session.id,
+        "title": session.title,
+        "is_bookmarked": session.is_bookmarked,
+        "messages": formatted_messages
+    }
+
+@router.post("/sessions/{session_id}/bookmark")
+def toggle_bookmark(session_id: int, user_id: int, db: Session = Depends(get_db)):
+    session = db.query(ChatSession).filter(ChatSession.id == session_id, ChatSession.user_id == user_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    session.is_bookmarked = not session.is_bookmarked
+    db.commit()
+    return {"id": session.id, "is_bookmarked": session.is_bookmarked}
+
+@router.get("/claims/popular")
+def get_popular_claims(db: Session = Depends(get_db)):
+    popular = db.query(ClaimCheck.claim_text, func.count(ClaimCheck.id).label('count'))\
+                .group_by(ClaimCheck.claim_text)\
+                .order_by(desc(func.count(ClaimCheck.id)))\
+                .limit(5).all()
+    return {"popular_claims": [p.claim_text for p in popular]}
