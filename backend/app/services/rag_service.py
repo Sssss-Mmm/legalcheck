@@ -16,6 +16,7 @@ class FactCheckResult(BaseModel):
     section_3_real_case_example: str = Field(description="3️⃣ 현실 적용 예시 (일반인이 이해할 수 있는 사례)")
     section_4_caution: str = Field(description="4️⃣ 주의사항 (예외 상황, 오해하기 쉬운 부분, 분쟁 가능성)")
     section_5_counseling_recommendation: str = Field(description="5️⃣ 법률 상담 권장 여부 (필요시 '정확한 판단은 노무사/변호사 상담이 필요합니다.' 명시)")
+    section_6_suggested_followups: list[str] = Field(description="6️⃣ 추천 후속 질문 3가지 (사용자의 현재 상황에서 궁금해할 만한 이어지는 질문)")
 
 class LegalFactChecker:
     def __init__(self):
@@ -79,6 +80,7 @@ Every explanation must follow exactly this JSON structure mapped by the instruct
 3️⃣ 현실 적용 예시 (일반인이 이해할 수 있는 사례)
 4️⃣ 주의사항 (예외 상황, 오해하기 쉬운 부분, 분쟁 가능성)
 5️⃣ 법률 상담 권장 여부 (실제 소송/분쟁 가능성이 있다면 "정확한 판단은 노무사/변호사 상담이 필요합니다." 명시)
+6️⃣ 추천 후속 질문 3가지 (사용자의 현재 상황에서 궁금해할 만한 이어지는 질문)
 
 **Language & Tone Rules:**
 - Clear. Simple. Accurate. Calm. No legal jargon without explanation.
@@ -162,6 +164,7 @@ Every explanation must follow exactly this JSON structure mapped by the instruct
 3️⃣ 현실 적용 예시 (일반인이 이해할 수 있는 사례)
 4️⃣ 주의사항 (예외 상황, 오해하기 쉬운 부분, 분쟁 가능성)
 5️⃣ 법률 상담 권장 여부 (실제 소송/분쟁 가능성이 있다면 "정확한 판단은 노무사/변호사 상담이 필요합니다." 명시)
+6️⃣ 추천 후속 질문 3가지 (사용자의 현재 상황에서 궁금해할 만한 이어지는 질문)
 
 **Language & Tone Rules:**
 - Clear. Simple. Accurate. Calm. No legal jargon without explanation.
@@ -224,7 +227,8 @@ Every explanation must follow exactly this JSON structure mapped by the instruct
                 "section_2_law_explanation": "응답 처리 오류 발생",
                 "section_3_real_case_example": "N/A",
                 "section_4_caution": "N/A",
-                "section_5_counseling_recommendation": "N/A"
+                "section_5_counseling_recommendation": "N/A",
+                "section_6_suggested_followups": []
             }
         
         return {
