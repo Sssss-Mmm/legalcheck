@@ -129,6 +129,7 @@ async def check_fact(request: CheckRequest, user_id: int, db: Session = Depends(
     agent_decision = await agent.decide_action(intent_analysis)
 
     plugin_context = ""
+    search_query = request.query
     # 2.5 Process Image if provided (Vision API)
     if getattr(request, "image_data", None):
         vision_result = await vision.extract_text_from_image(request.image_data)
