@@ -63,6 +63,12 @@ export default function Home() {
     }
   };
 
+  const startNewChat = () => {
+    setSessionId(null);
+    setChatHistory([]);
+    setActiveTab("chat");
+  };
+
   const fetchHistory = async () => {
     if (!session?.user) return;
     try {
@@ -78,10 +84,10 @@ export default function Home() {
   };
 
   useEffect(() => {
-    if (activeTab === "history") {
+    if (session?.user) {
       fetchHistory();
     }
-  }, [activeTab, session]);
+  }, [session]);
 
   const loadSession = async (sid: number) => {
     if (!session?.user) return;
@@ -105,8 +111,8 @@ export default function Home() {
       const userId = (session.user as any).id;
       const res = await fetch(`http://localhost:8000/sessions/${sid}/bookmark?user_id=${userId}`, { method: "POST" });
       if (res.ok) {
-        // Refresh history if in history tab
-        if (activeTab === "history") fetchHistory();
+        // Refresh history
+        fetchHistory();
       }
     } catch (err) {
       console.error(err);
@@ -281,317 +287,366 @@ export default function Home() {
             </button>
           </div>
         ) : (
-          <div className="flex flex-col h-full overflow-hidden">
-            {/* Tabs */}
-            <div className="flex space-x-4 mb-4 border-b border-gray-700/50 pb-2 flex-shrink-0">
+          <div className="flex h-full overflow-hidden gap-6">
+            {/* Sidebar (History) */}
+            <div className="hidden md:flex flex-col w-72 bg-gray-900/40 rounded-2xl border border-gray-700/50 p-4 h-full flex-shrink-0 shadow-lg">
               <button
-                onClick={() => setActiveTab("chat")}
-                className={`pb-2 px-2 text-sm font-medium transition-colors ${activeTab === "chat" ? "text-indigo-400 border-b-2 border-indigo-400" : "text-gray-400 hover:text-gray-200"}`}
+                onClick={startNewChat}
+                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 px-4 rounded-xl transition-all shadow-sm mb-4 flex items-center justify-center gap-2"
               >
-                팩트체크 대화
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
+                새 대화 시작
               </button>
-              <button
-                onClick={() => setActiveTab("search")}
-                className={`pb-2 px-2 text-sm font-medium transition-colors ${activeTab === "search" ? "text-indigo-400 border-b-2 border-indigo-400" : "text-gray-400 hover:text-gray-200"}`}
-              >
-                조문 검색
-              </button>
-              <button
-                onClick={() => setActiveTab("history")}
-                className={`pb-2 px-2 text-sm font-medium transition-colors ${activeTab === "history" ? "text-indigo-400 border-b-2 border-indigo-400" : "text-gray-400 hover:text-gray-200"}`}
-              >
-                내 이력 및 북마크
-              </button>
-            </div>
 
-            {activeTab === "chat" ? (
-              <>
-                <div className="flex-grow overflow-y-auto space-y-6 pr-2 custom-scrollbar pb-6 rounded-xl">
-                  {chatHistory.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-gray-500">
-                      <p>궁금한 법률 질문을 편하게 입력해주세요.</p>
-
-                      {popularClaims.length > 0 && (
-                        <div className="mt-8 overflow-hidden max-w-2xl w-full">
-                          <h4 className="text-sm font-bold text-gray-400 mb-4 flex items-center justify-center">
-                            <span className="mr-2">🔥</span>실시간 인기 팩트체크
-                          </h4>
-                          <div className="flex flex-wrap gap-2 justify-center">
-                            {popularClaims.map((claim, cIdx) => (
-                              <button
-                                key={cIdx}
-                                onClick={() => setQuery(claim)}
-                                className="bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-indigo-500 text-gray-300 px-4 py-2 rounded-full text-sm transition-all shadow-sm"
-                              >
-                                {claim}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    chatHistory.map((msg, idx) => (
-                      <div key={idx} className={`flex w-full ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                        <div className={`max-w-[85%] rounded-2xl p-5 ${msg.role === "user"
-                          ? "bg-indigo-600 text-white rounded-br-none shadow-md"
-                          : "bg-gray-800/80 border border-gray-700/50 text-gray-100 rounded-bl-none shadow-lg"
-                          }`}>
-
-                          {msg.role === "user" ? (
-                            <div>
-                              {msg.attached_image && (
-                                <div className="mb-3">
-                                  <img src={msg.attached_image} alt="User attachment" className="max-w-xs rounded-xl shadow-sm border border-indigo-400" />
-                                </div>
-                              )}
-                              <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-                            </div>
-                          ) : (
-                            <div className="flex flex-col space-y-4">
-                              {/* Rendering parsed AI Response */}
-                              {msg.verdict && (
-                                <div className="mb-2">
-                                  {getVerdictBadge(msg.verdict)}
-                                </div>
-                              )}
-
-                              {msg.section_1_summary ? (
-                                <div className="text-gray-100 font-medium leading-relaxed whitespace-pre-wrap text-[16px] mb-2 p-3 bg-gray-900/60 rounded-xl border border-gray-700/50">
-                                  <h4 className="text-sm text-indigo-300 font-bold mb-1 flex items-center">
-                                    <span className="mr-2">📝</span>핵심 요약
-                                  </h4>
-                                  {msg.section_1_summary}
-                                </div>
-                              ) : (
-                                <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-                              )}
-
-                              {msg.section_2_law_explanation && (
-                                <div className="text-gray-300 leading-relaxed whitespace-pre-wrap text-[15px] pt-2">
-                                  <h4 className="text-sm text-blue-300 font-bold mb-1 flex items-center">
-                                    <span className="mr-2">⚖️</span>법 조문 기준 설명
-                                  </h4>
-                                  <div className="pl-6 border-l-2 border-blue-500/30">
-                                    {msg.section_2_law_explanation}
-                                  </div>
-                                </div>
-                              )}
-
-                              {msg.section_3_real_case_example && (
-                                <div className="bg-gray-900/40 p-3 rounded-lg border border-gray-700/30 mt-3">
-                                  <h4 className="text-sm text-indigo-400 font-bold mb-1 flex items-center">
-                                    <span className="mr-2">💡</span>현실 적용 예시
-                                  </h4>
-                                  <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{msg.section_3_real_case_example}</p>
-                                </div>
-                              )}
-
-                              {msg.section_4_caution && (
-                                <div className="bg-yellow-900/10 p-3 rounded-lg border border-yellow-700/30 mt-3">
-                                  <h4 className="text-sm text-yellow-500 font-bold mb-1 flex items-center">
-                                    <span className="mr-2">⚠️</span>주의사항
-                                  </h4>
-                                  <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{msg.section_4_caution}</p>
-                                </div>
-                              )}
-
-                              {msg.section_5_counseling_recommendation && (
-                                <div className="bg-red-900/10 p-3 rounded-lg border border-red-900/30 mt-3">
-                                  <h4 className="text-sm text-red-400 font-bold mb-1 flex items-center">
-                                    <span className="mr-2">👩‍⚖️</span>전문가 상담 건의
-                                  </h4>
-                                  <p className="text-sm text-red-200/80 leading-relaxed whitespace-pre-wrap">{msg.section_5_counseling_recommendation}</p>
-                                </div>
-                              )}
-
-                              {/* Suggested Follow-ups */}
-                              {msg.section_6_suggested_followups && msg.section_6_suggested_followups.length > 0 && (
-                                <div className="mt-4 pt-3 border-t border-gray-600/50">
-                                  <h4 className="text-sm text-indigo-300 font-bold mb-3 flex items-center">
-                                    <span className="mr-2">💬</span>추천 후속 질문
-                                  </h4>
-                                  <div className="flex flex-wrap gap-2">
-                                    {msg.section_6_suggested_followups.map((q, qIdx) => (
-                                      <button
-                                        key={qIdx}
-                                        onClick={() => submitQuery(q)}
-                                        className="bg-gray-800 hover:bg-indigo-600/80 border border-indigo-500/50 text-indigo-200 hover:text-white px-4 py-2 rounded-full text-sm transition-all shadow-sm text-left"
-                                      >
-                                        {q}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Sources */}
-                              {msg.sources && msg.sources.length > 0 && (
-                                <div className="mt-2 pt-3 border-t border-gray-600/50">
-                                  <h4 className="text-xs text-gray-400 uppercase tracking-wider mb-2 font-semibold">참고 문서</h4>
-                                  <ul className="space-y-1">
-                                    {msg.sources.map((src, sIdx) => (
-                                      <li key={sIdx} className="text-xs text-indigo-300 flex items-center">
-                                        <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full mr-2"></span>
-                                        {src}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
-
-                              {/* Actions */}
-                              <div className="mt-3 pt-3 flex items-center gap-3 border-t border-gray-700/30">
-                                <button
-                                  onClick={() => handleShare(msg)}
-                                  className="text-xs flex items-center gap-1 text-gray-400 hover:text-indigo-400 transition"
-                                >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
-                                  공유하기
-                                </button>
-                                {idx === chatHistory.length - 1 && sessionId && (
-                                  <button
-                                    onClick={() => toggleBookmark(sessionId)}
-                                    className="text-xs flex items-center gap-1 text-gray-400 hover:text-yellow-400 transition"
-                                  >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
-                                    세션 북마크
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                  {loading && (
-                    <div className="flex justify-start">
-                      <div className="bg-gray-800/80 border border-gray-700/50 p-4 rounded-2xl rounded-bl-none flex space-x-2">
-                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce"></div>
-                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce delay-75"></div>
-                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce delay-150"></div>
-                      </div>
-                    </div>
-                  )}
-                  <div ref={messagesEndRef} />
-                </div>
-
-                <div className="flex-shrink-0 w-full mt-4 bg-gray-900 pb-10">
-                  {selectedImage && (
-                    <div className="mb-3 relative inline-block">
-                      <img src={selectedImage} alt="Preview" className="h-20 w-20 object-cover rounded-xl border-2 border-indigo-500 shadow-md" />
-                      <button
-                        onClick={() => setSelectedImage(null)}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center shadow hover:bg-red-600 font-bold"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  )}
-                  <form onSubmit={handleCheck} className="relative group w-full">
-                    <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl blur opacity-25 transition duration-1000 group-focus-within:opacity-50 group-hover:opacity-50"></div>
-                    <div className="relative flex items-center bg-gray-900 rounded-2xl p-1 border border-gray-700/50 shadow-2xl">
-
-                      {/* Image Upload Button */}
-                      <label className="cursor-pointer text-gray-400 hover:text-indigo-400 p-3 transition-colors">
-                        <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
-                        </svg>
-                      </label>
-
-                      <input
-                        type="text"
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        placeholder="질문을 입력하세요... (계약서, 명세서 등 이미지 첨부 가능)"
-                        className="flex-grow bg-transparent text-white placeholder-gray-500 px-3 py-4 focus:outline-none"
-                        disabled={loading}
-                      />
-                      <button
-                        type="submit"
-                        disabled={loading || !query}
-                        className="bg-indigo-600 hover:bg-indigo-500 text-white p-3 rounded-xl transition-all duration-300 mr-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </>
-            ) : activeTab === "search" ? (
-              <div className="flex-grow flex flex-col h-full overflow-hidden pb-4">
-                <form onSubmit={handleSearch} className="mb-4 flex gap-2 flex-shrink-0">
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="검색할 규정이나 법령 키워드를 입력하세요..."
-                    className="flex-grow bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-indigo-500"
-                  />
-                  <button
-                    type="submit"
-                    disabled={isSearching || !searchQuery}
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl transition-all disabled:opacity-50"
-                  >
-                    {isSearching ? "검색 중..." : "검색"}
-                  </button>
-                </form>
-
-                <div className="flex-grow overflow-y-auto space-y-4 pr-2 custom-scrollbar pb-6 rounded-xl">
-                  {searchResults.length === 0 && !isSearching ? (
-                    <div className="text-center text-gray-500 mt-10">검색 결과가 여기에 표시됩니다.</div>
-                  ) : (
-                    searchResults.map((result, idx) => (
-                      <div key={idx} className="bg-gray-800 border border-gray-700 rounded-xl p-5 shadow-sm">
-                        <h3 className="text-lg font-bold text-indigo-300 mb-2">
-                          {result.law_name} {result.article_number}
+              <h2 className="text-sm font-bold mb-3 text-indigo-300 uppercase tracking-wider pl-1">이전 기록</h2>
+              <div className="flex-grow overflow-y-auto space-y-2 custom-scrollbar pr-1">
+                {sessionHistory.length === 0 ? (
+                  <div className="text-center text-gray-500 mt-4 text-xs">
+                    <p>기록이 없습니다.</p>
+                  </div>
+                ) : (
+                  sessionHistory.map((sess, idx) => (
+                    <div
+                      key={idx}
+                      className={`border rounded-lg p-3 transition-all group flex justify-between items-center cursor-pointer shadow-sm ${sessionId === sess.id ? "bg-gray-800 border-indigo-500" : "bg-gray-800/50 border-gray-700/50 hover:border-indigo-500/50"}`}
+                      onClick={() => loadSession(sess.id)}
+                    >
+                      <div className="overflow-hidden pr-2 flex-grow">
+                        <h3 className="text-gray-200 text-sm font-medium truncate mb-0.5">
+                          {sess.title || "새 질문"}
                         </h3>
-                        <p className="text-gray-300 whitespace-pre-wrap leading-relaxed text-[15px]">
-                          {result.content}
+                        <p className="text-[10px] text-gray-500">
+                          {new Date(sess.updated_at).toLocaleDateString()}
                         </p>
                       </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="flex-grow flex flex-col h-full overflow-hidden pb-4">
-                <h2 className="text-xl font-bold mb-4 text-indigo-300">이전 팩트체크 기록</h2>
-                <div className="flex-grow overflow-y-auto space-y-3 custom-scrollbar pr-2">
-                  {sessionHistory.length === 0 ? (
-                    <div className="text-center text-gray-500 mt-10 flex flex-col items-center">
-                      <svg className="w-16 h-16 text-gray-700 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
-                      <p>이전 기록이 없습니다.</p>
-                      <p className="text-sm mt-1">대화를 시작하여 팩트체크 기록을 남겨보세요.</p>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleBookmark(sess.id); }}
+                          className={`p-1.5 rounded-full transition-colors ${sess.is_bookmarked ? "text-yellow-400 bg-yellow-400/10" : "text-gray-500 hover:text-yellow-400 hover:bg-gray-700/80"}`}
+                          title="북마크"
+                        >
+                          <svg className="w-4 h-4" fill={sess.is_bookmarked ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
+                        </button>
+                      </div>
                     </div>
-                  ) : (
-                    sessionHistory.map((sess, idx) => (
-                      <div key={idx} className="bg-gray-800 border border-gray-700/50 hover:border-indigo-500/50 rounded-xl p-4 transition-all group flex justify-between items-center cursor-pointer shadow-sm" onClick={() => loadSession(sess.id)}>
-                        <div className="overflow-hidden pr-4 flex-grow">
-                          <h3 className="text-gray-200 font-medium truncate mb-1">
-                            {sess.title || "새 질문"}
-                          </h3>
-                          <p className="text-xs text-gray-500">
-                            {new Date(sess.updated_at).toLocaleString()}
-                          </p>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Main Content Area */}
+            <div className="flex flex-col flex-grow h-full overflow-hidden">
+              {/* Tabs */}
+              <div className="flex space-x-4 mb-4 border-b border-gray-700/50 pb-2 flex-shrink-0">
+                <button
+                  onClick={() => setActiveTab("chat")}
+                  className={`pb-2 px-2 text-sm font-medium transition-colors ${activeTab === "chat" ? "text-indigo-400 border-b-2 border-indigo-400" : "text-gray-400 hover:text-gray-200"}`}
+                >
+                  팩트체크 대화
+                </button>
+                <button
+                  onClick={() => setActiveTab("search")}
+                  className={`pb-2 px-2 text-sm font-medium transition-colors ${activeTab === "search" ? "text-indigo-400 border-b-2 border-indigo-400" : "text-gray-400 hover:text-gray-200"}`}
+                >
+                  조문 검색
+                </button>
+                <button
+                  onClick={() => setActiveTab("history")}
+                  className={`md:hidden pb-2 px-2 text-sm font-medium transition-colors ${activeTab === "history" ? "text-indigo-400 border-b-2 border-indigo-400" : "text-gray-400 hover:text-gray-200"}`}
+                >
+                  내 이력 및 북마크
+                </button>
+              </div>
+
+              {activeTab === "chat" ? (
+                <>
+                  <div className="flex-grow overflow-y-auto space-y-6 pr-2 custom-scrollbar pb-6 rounded-xl">
+                    {chatHistory.length === 0 ? (
+                      <div className="h-full flex flex-col items-center justify-center text-gray-500">
+                        <p>궁금한 법률 질문을 편하게 입력해주세요.</p>
+
+                        {popularClaims.length > 0 && (
+                          <div className="mt-8 overflow-hidden max-w-2xl w-full">
+                            <h4 className="text-sm font-bold text-gray-400 mb-4 flex items-center justify-center">
+                              <span className="mr-2">🔥</span>실시간 인기 팩트체크
+                            </h4>
+                            <div className="flex flex-wrap gap-2 justify-center">
+                              {popularClaims.map((claim, cIdx) => (
+                                <button
+                                  key={cIdx}
+                                  onClick={() => setQuery(claim)}
+                                  className="bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-indigo-500 text-gray-300 px-4 py-2 rounded-full text-sm transition-all shadow-sm"
+                                >
+                                  {claim}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      chatHistory.map((msg, idx) => (
+                        <div key={idx} className={`flex w-full ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                          <div className={`max-w-[85%] rounded-2xl p-5 ${msg.role === "user"
+                            ? "bg-indigo-600 text-white rounded-br-none shadow-md"
+                            : "bg-gray-800/80 border border-gray-700/50 text-gray-100 rounded-bl-none shadow-lg"
+                            }`}>
+
+                            {msg.role === "user" ? (
+                              <div>
+                                {msg.attached_image && (
+                                  <div className="mb-3">
+                                    <img src={msg.attached_image} alt="User attachment" className="max-w-xs rounded-xl shadow-sm border border-indigo-400" />
+                                  </div>
+                                )}
+                                <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col space-y-4">
+                                {/* Rendering parsed AI Response */}
+                                {msg.verdict && (
+                                  <div className="mb-2">
+                                    {getVerdictBadge(msg.verdict)}
+                                  </div>
+                                )}
+
+                                {msg.section_1_summary ? (
+                                  <div className="text-gray-100 font-medium leading-relaxed whitespace-pre-wrap text-[16px] mb-2 p-3 bg-gray-900/60 rounded-xl border border-gray-700/50">
+                                    <h4 className="text-sm text-indigo-300 font-bold mb-1 flex items-center">
+                                      <span className="mr-2">📝</span>핵심 요약
+                                    </h4>
+                                    {msg.section_1_summary}
+                                  </div>
+                                ) : (
+                                  <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                                )}
+
+                                {msg.section_2_law_explanation && (
+                                  <div className="text-gray-300 leading-relaxed whitespace-pre-wrap text-[15px] pt-2">
+                                    <h4 className="text-sm text-blue-300 font-bold mb-1 flex items-center">
+                                      <span className="mr-2">⚖️</span>법 조문 기준 설명
+                                    </h4>
+                                    <div className="pl-6 border-l-2 border-blue-500/30">
+                                      {msg.section_2_law_explanation}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {msg.section_3_real_case_example && (
+                                  <div className="bg-gray-900/40 p-3 rounded-lg border border-gray-700/30 mt-3">
+                                    <h4 className="text-sm text-indigo-400 font-bold mb-1 flex items-center">
+                                      <span className="mr-2">💡</span>현실 적용 예시
+                                    </h4>
+                                    <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{msg.section_3_real_case_example}</p>
+                                  </div>
+                                )}
+
+                                {msg.section_4_caution && (
+                                  <div className="bg-yellow-900/10 p-3 rounded-lg border border-yellow-700/30 mt-3">
+                                    <h4 className="text-sm text-yellow-500 font-bold mb-1 flex items-center">
+                                      <span className="mr-2">⚠️</span>주의사항
+                                    </h4>
+                                    <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{msg.section_4_caution}</p>
+                                  </div>
+                                )}
+
+                                {msg.section_5_counseling_recommendation && (
+                                  <div className="bg-red-900/10 p-3 rounded-lg border border-red-900/30 mt-3">
+                                    <h4 className="text-sm text-red-400 font-bold mb-1 flex items-center">
+                                      <span className="mr-2">👩‍⚖️</span>전문가 상담 건의
+                                    </h4>
+                                    <p className="text-sm text-red-200/80 leading-relaxed whitespace-pre-wrap">{msg.section_5_counseling_recommendation}</p>
+                                  </div>
+                                )}
+
+                                {/* Suggested Follow-ups */}
+                                {msg.section_6_suggested_followups && msg.section_6_suggested_followups.length > 0 && (
+                                  <div className="mt-4 pt-3 border-t border-gray-600/50">
+                                    <h4 className="text-sm text-indigo-300 font-bold mb-3 flex items-center">
+                                      <span className="mr-2">💬</span>추천 후속 질문
+                                    </h4>
+                                    <div className="flex flex-wrap gap-2">
+                                      {msg.section_6_suggested_followups.map((q, qIdx) => (
+                                        <button
+                                          key={qIdx}
+                                          onClick={() => submitQuery(q)}
+                                          className="bg-gray-800 hover:bg-indigo-600/80 border border-indigo-500/50 text-indigo-200 hover:text-white px-4 py-2 rounded-full text-sm transition-all shadow-sm text-left"
+                                        >
+                                          {q}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Sources */}
+                                {msg.sources && msg.sources.length > 0 && (
+                                  <div className="mt-2 pt-3 border-t border-gray-600/50">
+                                    <h4 className="text-xs text-gray-400 uppercase tracking-wider mb-2 font-semibold">참고 문서</h4>
+                                    <ul className="space-y-1">
+                                      {msg.sources.map((src, sIdx) => (
+                                        <li key={sIdx} className="text-xs text-indigo-300 flex items-center">
+                                          <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full mr-2"></span>
+                                          {src}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+
+                                {/* Actions */}
+                                <div className="mt-3 pt-3 flex items-center gap-3 border-t border-gray-700/30">
+                                  <button
+                                    onClick={() => handleShare(msg)}
+                                    className="text-xs flex items-center gap-1 text-gray-400 hover:text-indigo-400 transition"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
+                                    공유하기
+                                  </button>
+                                  {idx === chatHistory.length - 1 && sessionId && (
+                                    <button
+                                      onClick={() => toggleBookmark(sessionId)}
+                                      className="text-xs flex items-center gap-1 text-gray-400 hover:text-yellow-400 transition"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
+                                      세션 북마크
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); toggleBookmark(sess.id); }}
-                            className={`p-2 rounded-full transition-colors ${sess.is_bookmarked ? "text-yellow-400 bg-yellow-400/10" : "text-gray-500 hover:text-yellow-400 hover:bg-gray-700"}`}
-                            title="북마크"
-                          >
-                            <svg className="w-5 h-5" fill={sess.is_bookmarked ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
-                          </button>
+                      ))
+                    )}
+                    {loading && (
+                      <div className="flex justify-start">
+                        <div className="bg-gray-800/80 border border-gray-700/50 p-4 rounded-2xl rounded-bl-none flex space-x-2">
+                          <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce"></div>
+                          <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce delay-75"></div>
+                          <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce delay-150"></div>
                         </div>
                       </div>
-                    ))
-                  )}
+                    )}
+                    <div ref={messagesEndRef} />
+                  </div>
+
+                  <div className="flex-shrink-0 w-full mt-4 bg-gray-900 pb-10">
+                    {selectedImage && (
+                      <div className="mb-3 relative inline-block">
+                        <img src={selectedImage} alt="Preview" className="h-20 w-20 object-cover rounded-xl border-2 border-indigo-500 shadow-md" />
+                        <button
+                          onClick={() => setSelectedImage(null)}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center shadow hover:bg-red-600 font-bold"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+                    <form onSubmit={handleCheck} className="relative group w-full">
+                      <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl blur opacity-25 transition duration-1000 group-focus-within:opacity-50 group-hover:opacity-50"></div>
+                      <div className="relative flex items-center bg-gray-900 rounded-2xl p-1 border border-gray-700/50 shadow-2xl">
+
+                        {/* Image Upload Button */}
+                        <label className="cursor-pointer text-gray-400 hover:text-indigo-400 p-3 transition-colors">
+                          <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
+                          </svg>
+                        </label>
+
+                        <input
+                          type="text"
+                          value={query}
+                          onChange={(e) => setQuery(e.target.value)}
+                          placeholder="질문을 입력하세요... (계약서, 명세서 등 이미지 첨부 가능)"
+                          className="flex-grow bg-transparent text-white placeholder-gray-500 px-3 py-4 focus:outline-none"
+                          disabled={loading}
+                        />
+                        <button
+                          type="submit"
+                          disabled={loading || !query}
+                          className="bg-indigo-600 hover:bg-indigo-500 text-white p-3 rounded-xl transition-all duration-300 mr-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </>
+              ) : activeTab === "search" ? (
+                <div className="flex-grow flex flex-col h-full overflow-hidden pb-4">
+                  <form onSubmit={handleSearch} className="mb-4 flex gap-2 flex-shrink-0">
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="검색할 규정이나 법령 키워드를 입력하세요..."
+                      className="flex-grow bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-indigo-500"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isSearching || !searchQuery}
+                      className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl transition-all disabled:opacity-50"
+                    >
+                      {isSearching ? "검색 중..." : "검색"}
+                    </button>
+                  </form>
+
+                  <div className="flex-grow overflow-y-auto space-y-4 pr-2 custom-scrollbar pb-6 rounded-xl">
+                    {searchResults.length === 0 && !isSearching ? (
+                      <div className="text-center text-gray-500 mt-10">검색 결과가 여기에 표시됩니다.</div>
+                    ) : (
+                      searchResults.map((result, idx) => (
+                        <div key={idx} className="bg-gray-800 border border-gray-700 rounded-xl p-5 shadow-sm">
+                          <h3 className="text-lg font-bold text-indigo-300 mb-2">
+                            {result.law_name} {result.article_number}
+                          </h3>
+                          <p className="text-gray-300 whitespace-pre-wrap leading-relaxed text-[15px]">
+                            {result.content}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="flex-grow flex flex-col h-full overflow-hidden pb-4">
+                  <h2 className="text-xl font-bold mb-4 text-indigo-300">이전 팩트체크 기록</h2>
+                  <div className="flex-grow overflow-y-auto space-y-3 custom-scrollbar pr-2">
+                    {sessionHistory.length === 0 ? (
+                      <div className="text-center text-gray-500 mt-10 flex flex-col items-center">
+                        <svg className="w-16 h-16 text-gray-700 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                        <p>이전 기록이 없습니다.</p>
+                        <p className="text-sm mt-1">대화를 시작하여 팩트체크 기록을 남겨보세요.</p>
+                      </div>
+                    ) : (
+                      sessionHistory.map((sess, idx) => (
+                        <div key={idx} className="bg-gray-800 border border-gray-700/50 hover:border-indigo-500/50 rounded-xl p-4 transition-all group flex justify-between items-center cursor-pointer shadow-sm" onClick={() => loadSession(sess.id)}>
+                          <div className="overflow-hidden pr-4 flex-grow">
+                            <h3 className="text-gray-200 font-medium truncate mb-1">
+                              {sess.title || "새 질문"}
+                            </h3>
+                            <p className="text-xs text-gray-500">
+                              {new Date(sess.updated_at).toLocaleString()}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleBookmark(sess.id); }}
+                              className={`p-2 rounded-full transition-colors ${sess.is_bookmarked ? "text-yellow-400 bg-yellow-400/10" : "text-gray-500 hover:text-yellow-400 hover:bg-gray-700"}`}
+                              title="북마크"
+                            >
+                              <svg className="w-5 h-5" fill={sess.is_bookmarked ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
