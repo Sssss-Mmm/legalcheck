@@ -279,6 +279,16 @@ def toggle_bookmark(session_id: int, user_id: int, db: Session = Depends(get_db)
     db.commit()
     return {"id": session.id, "is_bookmarked": session.is_bookmarked}
 
+@router.delete("/sessions/{session_id}")
+def delete_session(session_id: int, user_id: int, db: Session = Depends(get_db)):
+    session = db.query(ChatSession).filter(ChatSession.id == session_id, ChatSession.user_id == user_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    db.delete(session)
+    db.commit()
+    return {"status": "ok", "message": "Session deleted"}
+
 @router.get("/claims/popular")
 def get_popular_claims(db: Session = Depends(get_db)):
     popular = db.query(ClaimCheck.claim_text, func.count(ClaimCheck.id).label('count'))\

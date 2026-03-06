@@ -119,6 +119,23 @@ export default function Home() {
     }
   };
 
+  const deleteSession = async (sid: number) => {
+    if (!session?.user) return;
+    if (!confirm("정말 이 대화 기록을 삭제하시겠습니까?")) return;
+    try {
+      const userId = (session.user as any).id;
+      const res = await fetch(`http://localhost:8000/sessions/${sid}?user_id=${userId}`, { method: "DELETE" });
+      if (res.ok) {
+        if (sessionId === sid) {
+          startNewChat();
+        }
+        fetchHistory();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleShare = (msg: ChatMessage) => {
     const textToShare = `[법률 팩트체크]\n\n요약: ${msg.section_1_summary || '요약 없음'}\n\n판정: ${msg.verdict || '확인불가'}\n${msg.section_2_law_explanation || ''}\n${msg.section_3_real_case_example || ''}\n${msg.section_4_caution || ''}`;
     navigator.clipboard.writeText(textToShare).then(() => {
@@ -326,6 +343,13 @@ export default function Home() {
                           title="북마크"
                         >
                           <svg className="w-4 h-4" fill={sess.is_bookmarked ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); deleteSession(sess.id); }}
+                          className="p-1.5 rounded-full text-gray-500 hover:text-red-400 hover:bg-gray-700/80 transition-colors"
+                          title="삭제"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                         </button>
                       </div>
                     </div>
@@ -638,6 +662,13 @@ export default function Home() {
                               title="북마크"
                             >
                               <svg className="w-5 h-5" fill={sess.is_bookmarked ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); deleteSession(sess.id); }}
+                              className="p-2 rounded-full text-gray-500 hover:text-red-400 hover:bg-gray-700 transition-colors"
+                              title="삭제"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                             </button>
                           </div>
                         </div>
