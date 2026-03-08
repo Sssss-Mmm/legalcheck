@@ -6,7 +6,7 @@ import os
 load_dotenv()
 
 # Example: mysql+pymysql://user:password@localhost:3306/dbname
-# Default to a local SQLite fallback if MYSQL_URL is not set for immediate running testing
+# Default to a local SQLite fallback if DATABASE_URL is not set for immediate running testing
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./legalcheck.db")
 
 # Only use check_same_thread for SQLite

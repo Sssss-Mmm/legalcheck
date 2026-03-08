@@ -22,6 +22,7 @@ dependencies = [
     "pymysql",
     "email-validator",
     "pyjwt",
+    "psycopg2-binary>=2.9.11",
 ]
 
 [dependency-groups]
