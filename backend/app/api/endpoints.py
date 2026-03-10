@@ -3,12 +3,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, desc, func
 
 from app.models import User, ChatSession, ChatMessage, ClaimCheck, VerdictEnum, LawArticleRevision, ExplanationCache, LawArticle, Law
-from app.schemas import LoginPayload, UserResponse, CheckRequest
+from app.schemas import LoginPayload, UserResponse, CheckRequest, TemplateRequest, TemplateResponse
 from app.core.database import get_db
 from app.services.rag_service import LegalFactChecker
 from app.services.hook_service import InputAnalyzer, OutputValidator
 from app.services.agent_service import RoutingAgent
 from app.services.vision_service import VisionAnalyzer
+from app.services.template_service import DocumentTemplateGenerator
 from app.plugins.precedent_search import search_precedents
 from app.plugins.calculator import calculate_dismissal_notice_allowance, calculate_severance_pay
 import json
@@ -19,6 +20,7 @@ analyzer = InputAnalyzer()
 agent = RoutingAgent()
 validator = OutputValidator()
 vision = VisionAnalyzer()
+template_generator = DocumentTemplateGenerator()
 
 @router.get("/")
 def read_root():
@@ -296,3 +298,15 @@ def get_popular_claims(db: Session = Depends(get_db)):
                 .order_by(desc(func.count(ClaimCheck.id)))\
                 .limit(5).all()
     return {"popular_claims": [p.claim_text for p in popular]}
+
+@router.post("/claims/template", response_model=TemplateResponse)
+async def generate_document_template(request: TemplateRequest):
+    try:
+        result = await template_generator.generate_template(request.claim_text, request.explanation)
+        return TemplateResponse(
+            document_title=result.get("document_title", "법적 대응 문서 초안"),
+            document_content=result.get("document_content", "문서 생성에 실패했습니다.")
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

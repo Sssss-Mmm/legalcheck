@@ -54,6 +54,8 @@ class ChatSessionResponse(ChatSessionBase):
         from_attributes = True
 
 # --- API Payloads ---
+from .template import TemplateRequest, TemplateResponse
+
 class LoginPayload(BaseModel):
     email: EmailStr
     name: Optional[str] = None

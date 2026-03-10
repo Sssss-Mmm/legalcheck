@@ -16,6 +16,8 @@ interface ChatMessage {
   section_6_suggested_followups?: string[];
   sources?: string[];
   attached_image?: string; // Base64 selected image preview
+  template_title?: string; // Generated template title
+  template_content?: string; // Generated template content
 }
 
 export default function Home() {
@@ -27,6 +29,7 @@ export default function Home() {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [generatingTemplate, setGeneratingTemplate] = useState<{ [key: number]: boolean }>({});
   const [mounted, setMounted] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -141,6 +144,47 @@ export default function Home() {
     navigator.clipboard.writeText(textToShare).then(() => {
       alert("결과가 클립보드에 복사되었습니다!");
     });
+  };
+
+  const handleCopyTemplate = (content: string) => {
+    navigator.clipboard.writeText(content).then(() => {
+      alert("문서 초안이 클립보드에 복사되었습니다!");
+    });
+  };
+
+  const generateTemplate = async (idx: number, msg: ChatMessage) => {
+    if (!msg.section_1_summary) return;
+    setGeneratingTemplate(prev => ({ ...prev, [idx]: true }));
+    try {
+      const claimText = idx > 0 ? chatHistory[idx - 1].content : "사용자 주장";
+      const res = await fetch(`http://localhost:8000/claims/template`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          claim_text: claimText,
+          explanation: `${msg.section_1_summary}\n\n${msg.section_2_law_explanation || ""}`
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setChatHistory(prev => {
+          const newHistory = [...prev];
+          newHistory[idx] = {
+            ...newHistory[idx],
+            template_title: data.document_title,
+            template_content: data.document_content
+          };
+          return newHistory;
+        });
+      } else {
+        alert("문서 초안 생성에 실패했습니다.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("서버 오류로 인해 문서 초안 생성에 실패했습니다.");
+    } finally {
+      setGeneratingTemplate(prev => ({ ...prev, [idx]: false }));
+    }
   };
 
   // Search state
@@ -499,6 +543,54 @@ export default function Home() {
                                           {q}
                                         </button>
                                       ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Template Generation UI */}
+                                {(msg.verdict === "TRUE" || msg.verdict === "PARTIAL") && !msg.template_content && (
+                                  <div className="mt-4 pt-4 border-t border-gray-600/50">
+                                    <div className="flex flex-col items-start bg-indigo-900/20 border border-indigo-500/30 p-4 rounded-xl">
+                                      <h4 className="text-sm font-bold text-indigo-300 mb-2 flex items-center">
+                                        <span className="mr-2">📄</span>실질적 권리 구제를 위한 다음 단계
+                                      </h4>
+                                      <p className="text-xs text-gray-400 mb-4 whitespace-pre-wrap">
+                                        노동청 진정서, 내용증명 등 법적 조치를 위한 공식 문서 초안이 필요하신가요? 판명된 팩트를 바탕으로 문서 양식을 자동 작성해 드립니다.
+                                      </p>
+                                      <button
+                                        onClick={() => generateTemplate(idx, msg)}
+                                        disabled={generatingTemplate[idx]}
+                                        className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800 text-white px-4 py-2 rounded-lg text-sm transition font-medium flex items-center"
+                                      >
+                                        {generatingTemplate[idx] ? (
+                                          <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"></span>작성 중...</>
+                                        ) : "법적 대응 문서 초안 작성하기"}
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {msg.template_content && (
+                                  <div className="mt-4 pt-4 border-t border-gray-600/50">
+                                    <div className="bg-gray-900 border border-indigo-500 p-4 rounded-xl shadow-lg relative">
+                                      <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-3">
+                                        <h4 className="text-md font-bold text-white flex items-center">
+                                          <span className="text-indigo-400 mr-2">📄</span>{msg.template_title || "문서 초안"}
+                                        </h4>
+                                        <button
+                                          onClick={() => handleCopyTemplate(msg.template_content!)}
+                                          className="text-xs bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded transition text-gray-200 flex items-center shadow-sm border border-gray-600"
+                                        >
+                                          <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                                          복사
+                                        </button>
+                                      </div>
+                                      <div className="bg-gray-800 p-4 rounded-lg font-mono text-xs text-gray-300 whitespace-pre-wrap leading-relaxed max-h-[500px] overflow-y-auto custom-scrollbar shadow-inner border border-gray-700/50">
+                                        {msg.template_content}
+                                      </div>
+                                      <div className="mt-3 bg-yellow-900/20 text-yellow-500 text-xs p-2.5 rounded-lg border border-yellow-700/30 font-medium">
+                                        ⚠️ 이 양식은 AI 가 생성한 참고용 초안이며 법적 효력을 보장하지 않습니다. 실제 공식 제출 전에 노무사나 변호사 등 전문가의 검토를 받으시기 바랍니다.
+                                      </div>
                                     </div>
                                   </div>
                                 )}
