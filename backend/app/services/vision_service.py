@@ -1,6 +1,9 @@
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 class VisionAnalyzer:
     def __init__(self):
@@ -44,5 +47,5 @@ class VisionAnalyzer:
             response = await self.llm.ainvoke([message])
             return response.content.strip()
         except Exception as e:
-            print(f"Vision Analysis Failed: {e}")
+            logger.error(f"Vision Analysis Failed: {e}")
             return f"[이미지 분석 실패: {e}]\n사용자가 이미지를 첨부했으나, 서버 또는 모델 오류로 이미지를 읽을 수 없습니다."

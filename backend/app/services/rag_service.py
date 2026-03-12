@@ -7,7 +7,10 @@ from langchain_classic.chains import create_history_aware_retriever, create_retr
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from pydantic import BaseModel, Field
 import os
+import logging
 from app.services.context_service import ContextCompressor
+
+logger = logging.getLogger(__name__)
 
 class FactCheckResult(BaseModel):
     verdict: str = Field(description="판정 결과: '사실', '일부 사실', '사실 아님', '추가 판단 필요' 중 하나")
@@ -190,7 +193,7 @@ Every explanation must follow exactly this JSON structure mapped by the instruct
                 MessagesPlaceholder("chat_history"),
                 ("human", "{input}"),
             ]
-        )
+        ).partial(format_instructions=self.parser.get_format_instructions())
         
         question_answer_chain = create_stuff_documents_chain(self.llm, qa_prompt)
 
@@ -210,7 +213,6 @@ Every explanation must follow exactly this JSON structure mapped by the instruct
             "input": query, 
             "chat_history": formatted_history,
             "context": [compressed_doc],
-            "format_instructions": self.parser.get_format_instructions()
         })
         
         # 'answer' string is expected to be a valid JSON from the LLM, but create_stuff_documents_chain 

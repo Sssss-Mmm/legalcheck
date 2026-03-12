@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect } from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 interface ChatMessage {
   role: "user" | "ai";
   content: string; // Used for user input or raw text
@@ -18,6 +20,11 @@ interface ChatMessage {
   attached_image?: string; // Base64 selected image preview
   template_title?: string; // Generated template title
   template_content?: string; // Generated template content
+}
+
+/** Extract numeric user ID from NextAuth session */
+function getUserId(session: any): string | null {
+  return session?.user?.id?.toString() ?? null;
 }
 
 export default function Home() {
@@ -56,7 +63,7 @@ export default function Home() {
 
   const fetchPopularClaims = async () => {
     try {
-      const res = await fetch(`http://localhost:8000/claims/popular`);
+      const res = await fetch(`${API_URL}/claims/popular`);
       if (res.ok) {
         const data = await res.json();
         setPopularClaims(data.popular_claims || []);
@@ -75,8 +82,11 @@ export default function Home() {
   const fetchHistory = async () => {
     if (!session?.user) return;
     try {
-      const userId = (session.user as any).id;
-      const res = await fetch(`http://localhost:8000/sessions?user_id=${userId}`);
+      const userId = getUserId(session);
+      if (!userId) return;
+      const res = await fetch(`${API_URL}/sessions`, {
+        headers: { "X-User-ID": userId },
+      });
       if (res.ok) {
         const data = await res.json();
         setSessionHistory(data.sessions || []);
@@ -95,8 +105,11 @@ export default function Home() {
   const loadSession = async (sid: number) => {
     if (!session?.user) return;
     try {
-      const userId = (session.user as any).id;
-      const res = await fetch(`http://localhost:8000/sessions/${sid}?user_id=${userId}`);
+      const userId = getUserId(session);
+      if (!userId) return;
+      const res = await fetch(`${API_URL}/sessions/${sid}`, {
+        headers: { "X-User-ID": userId },
+      });
       if (res.ok) {
         const data = await res.json();
         setSessionId(data.id);
@@ -111,10 +124,13 @@ export default function Home() {
   const toggleBookmark = async (sid: number) => {
     if (!session?.user) return;
     try {
-      const userId = (session.user as any).id;
-      const res = await fetch(`http://localhost:8000/sessions/${sid}/bookmark?user_id=${userId}`, { method: "POST" });
+      const userId = getUserId(session);
+      if (!userId) return;
+      const res = await fetch(`${API_URL}/sessions/${sid}/bookmark`, {
+        method: "POST",
+        headers: { "X-User-ID": userId },
+      });
       if (res.ok) {
-        // Refresh history
         fetchHistory();
       }
     } catch (err) {
@@ -126,8 +142,12 @@ export default function Home() {
     if (!session?.user) return;
     if (!confirm("정말 이 대화 기록을 삭제하시겠습니까?")) return;
     try {
-      const userId = (session.user as any).id;
-      const res = await fetch(`http://localhost:8000/sessions/${sid}?user_id=${userId}`, { method: "DELETE" });
+      const userId = getUserId(session);
+      if (!userId) return;
+      const res = await fetch(`${API_URL}/sessions/${sid}`, {
+        method: "DELETE",
+        headers: { "X-User-ID": userId },
+      });
       if (res.ok) {
         if (sessionId === sid) {
           startNewChat();
@@ -157,7 +177,7 @@ export default function Home() {
     setGeneratingTemplate(prev => ({ ...prev, [idx]: true }));
     try {
       const claimText = idx > 0 ? chatHistory[idx - 1].content : "사용자 주장";
-      const res = await fetch(`http://localhost:8000/claims/template`, {
+      const res = await fetch(`${API_URL}/claims/template`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -197,7 +217,7 @@ export default function Home() {
     if (!searchQuery) return;
     setIsSearching(true);
     try {
-      const res = await fetch(`http://localhost:8000/search/articles?query=${encodeURIComponent(searchQuery)}`);
+      const res = await fetch(`${API_URL}/search/articles?query=${encodeURIComponent(searchQuery)}`);
       const data = await res.json();
       setSearchResults(data.results || []);
     } catch (err) {
@@ -228,11 +248,13 @@ export default function Home() {
     setLoading(true);
 
     try {
-      const userId = (session.user as any).id;
-      const response = await fetch(`http://localhost:8000/check?user_id=${userId}`, {
+      const userId = getUserId(session);
+      if (!userId) return;
+      const response = await fetch(`${API_URL}/check`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "X-User-ID": userId,
         },
         body: JSON.stringify({
           query: userQuery,

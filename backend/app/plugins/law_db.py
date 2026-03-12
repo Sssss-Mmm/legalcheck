@@ -1,9 +1,14 @@
 import os
+import logging
 import urllib.request
 import urllib.parse
 import xml.etree.ElementTree as ET
 
-API_KEY = os.environ.get("LAW_GO_KR_API_KEY", "0d61d99fc6869f68a814c2cf2b2ab6f232f6e2b2e7e2554ba04b7ac61c6c10f4")
+logger = logging.getLogger(__name__)
+
+API_KEY = os.environ.get("LAW_GO_KR_API_KEY", "")
+if not API_KEY:
+    logger.warning("LAW_GO_KR_API_KEY not set — law article search will not work.")
 
 def search_law_articles(law_name: str, keyword: str = "", limit: int = 3) -> list:
     """

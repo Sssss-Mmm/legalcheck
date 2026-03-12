@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, Date, Boolean, ForeignKey, Enum, Table
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import enum
 from app.core.database import Base
 
@@ -37,7 +37,7 @@ class Law(Base):
     name = Column(String(255), index=True, nullable=False) # 근로기준법
     short_name = Column(String(100), nullable=True)        # 근기법
     jurisdiction = Column(String(50), default="KR")        # 국가
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     articles = relationship("LawArticle", back_populates="law", cascade="all, delete-orphan")
 
@@ -90,9 +90,9 @@ class ClaimCheck(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     claim_text = Column(Text, nullable=False)                       # 사용자 주장
-    verdict = Column(Enum(VerdictEnum), index=True, nullable=False) # 판정 결과
+    verdict = Column(Enum(VerdictEnum, native_enum=False), index=True, nullable=False) # 판정 결과
     explanation = Column(Text, nullable=False)                      # 판정 이유
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # 연결된 근거 조문들 (개정 이력 기준)
     revisions = relationship("LawArticleRevision", secondary=claim_revision_association, back_populates="claim_checks")
@@ -106,6 +106,6 @@ class ExplanationCache(Base):
     plain_summary = Column(Text, nullable=False) # 쉬운 설명
     example_case = Column(Text, nullable=True)   # 사례
     caution_note = Column(Text, nullable=True)   # 주의사항
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     revision = relationship("LawArticleRevision", back_populates="explanation_caches")

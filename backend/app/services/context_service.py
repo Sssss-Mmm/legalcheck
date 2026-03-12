@@ -1,6 +1,9 @@
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+import logging
+
+logger = logging.getLogger(__name__)
 
 class ContextCompressor:
     def __init__(self):
@@ -43,6 +46,6 @@ class ContextCompressor:
             })
             return compressed_context
         except Exception as e:
-            print(f"Context compression failed: {e}")
+            logger.error(f"Context compression failed: {e}")
             # Fallback to the raw context format if LLM fails
             return raw_context

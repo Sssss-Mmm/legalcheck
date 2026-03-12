@@ -1,10 +1,15 @@
 import os
+import logging
 import urllib.request
 import urllib.parse
 import xml.etree.ElementTree as ET
 
-# Load API Key from environment or use the one provided by user
-API_KEY = os.environ.get("LAW_GO_KR_API_KEY", "0d61d99fc6869f68a814c2cf2b2ab6f232f6e2b2e7e2554ba04b7ac61c6c10f4")
+logger = logging.getLogger(__name__)
+
+# Load API Key from environment
+API_KEY = os.environ.get("LAW_GO_KR_API_KEY", "")
+if not API_KEY:
+    logger.warning("LAW_GO_KR_API_KEY not set — precedent search will not work.")
 
 def search_precedents(keywords: list) -> list:
     """

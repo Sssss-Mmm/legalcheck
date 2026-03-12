@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Backgro
 from sqlalchemy.orm import Session
 from typing import List
 import os
+import logging
 
 from app.models import Law, LawArticle, LawArticleRevision, Topic, ExplanationCache
 from app.schemas.law import (
@@ -11,6 +12,7 @@ from app.schemas.law import (
     TopicCreate, TopicResponse
 )
 from app.core.database import get_db
+from app.core.auth import verify_admin
 
 # For PDF extraction
 import tempfile
@@ -20,7 +22,9 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(verify_admin)])
 
 @router.post("/laws", response_model=LawResponse)
 def create_law(law: LawCreate, db: Session = Depends(get_db)):
@@ -48,8 +52,8 @@ def create_revision(revision: LawArticleRevisionCreate, background_tasks: Backgr
     article = db.query(LawArticle).filter(LawArticle.id == revision.article_id).first()
     if article:
         law = db.query(Law).filter(Law.id == article.law_id).first()
-        from app.services.rag_service import LegalFactChecker
-        checker = LegalFactChecker()
+        # Import shared checker instance instead of creating a new one
+        from app.api.endpoints import checker
         background_tasks.add_task(checker.add_revisions, [{
             "law_id": article.law_id,
             "article_id": article.id,
@@ -165,9 +169,8 @@ async def upload_law_pdf(law_id: int, background_tasks: BackgroundTasks, file: U
             
         db.commit()
         
-        # Trigger vector store update for the new revisions
-        from app.services.rag_service import LegalFactChecker
-        checker = LegalFactChecker()
+        # Trigger vector store update using shared checker instance
+        from app.api.endpoints import checker
         background_tasks.add_task(checker.add_revisions, embedded_revisions)
         
         return {
