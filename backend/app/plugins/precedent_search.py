@@ -1,13 +1,13 @@
-import os
 import logging
 import urllib.request
 import urllib.parse
 import xml.etree.ElementTree as ET
 
+from app.core.config import get_settings
+
 logger = logging.getLogger(__name__)
 
-# Load API Key from environment
-API_KEY = os.environ.get("LAW_GO_KR_API_KEY", "")
+API_KEY = get_settings().LAW_GO_KR_API_KEY
 if not API_KEY:
     logger.warning("LAW_GO_KR_API_KEY not set — precedent search will not work.")
 
@@ -76,7 +76,7 @@ def search_precedents(keywords: list) -> list:
             })
             
     except Exception as e:
-        print(f"Error fetching precedent from DATA.GO.KR: {e}")
+        logger.error(f"Error fetching precedent from DATA.GO.KR: {e}")
         # API 인증 대기(1~2시간) 혹은 네트워크 오류 시 Fallback
         results.append({
             "사건명": f"판례 검색 대기 (키워드: {query})",

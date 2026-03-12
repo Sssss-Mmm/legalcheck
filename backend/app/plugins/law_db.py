@@ -1,12 +1,13 @@
-import os
 import logging
 import urllib.request
 import urllib.parse
 import xml.etree.ElementTree as ET
 
+from app.core.config import get_settings
+
 logger = logging.getLogger(__name__)
 
-API_KEY = os.environ.get("LAW_GO_KR_API_KEY", "")
+API_KEY = get_settings().LAW_GO_KR_API_KEY
 if not API_KEY:
     logger.warning("LAW_GO_KR_API_KEY not set — law article search will not work.")
 
@@ -86,7 +87,7 @@ def search_law_articles(law_name: str, keyword: str = "", limit: int = 3) -> lis
             results.extend(law_results)
                 
     except Exception as e:
-        print(f"Error fetching law info from DATA.GO.KR: {e}")
+        logger.error(f"Error fetching law info from DATA.GO.KR: {e}")
         # API 인증 대기(1~2시간) 혹은 네트워크 오류 시 Fallback
         results.append({
             "법령명": law_name,

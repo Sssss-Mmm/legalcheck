@@ -1,8 +1,8 @@
 from pydantic import BaseModel, Field
-from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from app.services.hook_service import IntentResult
+from app.core.llm import get_main_llm
 
 class AgentAction(BaseModel):
     requires_law_db_search: bool = Field(description="관련 법 조문을 데이터베이스에서 찾아보아야 하는가?")
@@ -13,7 +13,7 @@ class AgentAction(BaseModel):
 
 class RoutingAgent:
     def __init__(self):
-        self.llm = ChatOpenAI(model="gpt-4o", temperature=0)
+        self.llm = get_main_llm()
         self.parser = JsonOutputParser(pydantic_object=AgentAction)
 
     async def decide_action(self, intent_data: dict) -> dict:

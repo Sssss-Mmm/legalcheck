@@ -1,7 +1,8 @@
-from langchain_openai import ChatOpenAI
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
+
+from app.core.llm import get_mini_llm
 
 class TemplateOutput(BaseModel):
     document_title: str = Field(description="문서의 제목 (예: 임금체불 관련 진정서, 부당해고 구제신청서, 내용증명 등)")
@@ -9,7 +10,7 @@ class TemplateOutput(BaseModel):
 
 class DocumentTemplateGenerator:
     def __init__(self):
-        self.llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.2)
+        self.llm = get_mini_llm(temperature=0.2)
         self.parser = JsonOutputParser(pydantic_object=TemplateOutput)
         
     async def generate_template(self, claim_text: str, explanation: str) -> dict:

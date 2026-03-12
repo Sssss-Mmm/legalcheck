@@ -2,30 +2,24 @@ import json
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import or_, desc, func
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import desc, func
 
-from app.models import User, ChatSession, ChatMessage, ClaimCheck, VerdictEnum, LawArticleRevision, ExplanationCache, LawArticle, Law
+from app.models import User, ChatSession, ChatMessage, ClaimCheck, LawArticleRevision, LawArticle, Law
 from app.schemas import LoginPayload, UserResponse, CheckRequest, TemplateRequest, TemplateResponse
 from app.core.database import get_db
 from app.core.auth import get_current_user_id
-from app.services.rag_service import LegalFactChecker
-from app.services.hook_service import InputAnalyzer, OutputValidator
-from app.services.agent_service import RoutingAgent
-from app.services.vision_service import VisionAnalyzer
-from app.services.template_service import DocumentTemplateGenerator
-from app.plugins.precedent_search import search_precedents
-from app.plugins.calculator import calculate_dismissal_notice_allowance, calculate_severance_pay
+from app.core.container import get_services
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-checker = LegalFactChecker()
-analyzer = InputAnalyzer()
-agent = RoutingAgent()
-validator = OutputValidator()
-vision = VisionAnalyzer()
-template_generator = DocumentTemplateGenerator()
+
+# DI 컨테이너에서 서비스 인스턴스 가져오기
+_services = get_services()
+checker = _services.checker  # main.py에서 lifespan 초기화용으로 export
+check_service = _services.check_service
+template_generator = _services.template_generator
 
 @router.get("/")
 def read_root():
@@ -36,12 +30,10 @@ def search_articles(query: str = Query(..., description="검색할 키워드"), 
     """조문 키워드 검색 API (실시간 API 연동 하이브리드)"""
     from app.plugins.law_db import search_law_articles
     
-    # 1. 실시간 데이터포털 API를 통해 먼저 상위 법령(예: '주택', '근로기준법')으로 검색 시도
     api_results = search_law_articles(law_name=query, keyword="", limit=50)
     
     results = []
     
-    # API 호출 실패로 발생한 에러 메시지인지 검증
     is_api_error = False
     if len(api_results) == 1 and api_results[0].get("조문번호") == "-":
         is_api_error = True
@@ -59,14 +51,19 @@ def search_articles(query: str = Query(..., description="검색할 키워드"), 
                 "revision_id": f"api_{idx}"
             })
     else:
-        # 2. 로컬 DB 전문검색 Fallback — LIKE 와일드카드 이스케이프
-        escaped_query = query.replace("%", "\\%").replace("_", "\\_")
-        revisions = db.query(LawArticleRevision).filter(
-            LawArticleRevision.content.ilike(f"%{escaped_query}%")
-        ).limit(10).all()
+        # N+1 쿼리 해결: joinedload로 연관 엔티티를 미리 로드
+        revisions = (
+            db.query(LawArticleRevision)
+            .options(
+                joinedload(LawArticleRevision.article).joinedload(LawArticle.law)
+            )
+            .filter(LawArticleRevision.content.ilike(f"%{query}%"))
+            .limit(10)
+            .all()
+        )
         for rev in revisions:
-            article = db.query(LawArticle).filter(LawArticle.id == rev.article_id).first()
-            law = db.query(Law).filter(Law.id == article.law_id).first() if article else None
+            article = rev.article
+            law = article.law if article else None
             results.append({
                 "law_name": law.name if law else "Unknown",
                 "article_number": article.article_number if article else "Unknown",
@@ -104,144 +101,19 @@ async def check_fact(
         raise HTTPException(status_code=401, detail="User not found")
 
     session_id = request.session_id
-    if not session_id:
-        chat_session = ChatSession(user_id=user_id, title=request.query[:50])
-        db.add(chat_session)
-        db.commit()
-        db.refresh(chat_session)
-        session_id = chat_session.id
-    else:
+    if session_id:
         chat_session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
         if not chat_session or chat_session.user_id != user_id:
             raise HTTPException(status_code=403, detail="Invalid session")
 
-    # Load history
-    messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at).all()
-    history = [{"role": msg.role, "content": msg.content} for msg in messages]
-
-    # Add user message to DB
-    user_msg = ChatMessage(session_id=session_id, role="user", content=request.query)
-    db.add(user_msg)
-    db.commit()
-
-    # 1. Input Hook: Analyze query intent
-    intent_analysis = await analyzer.analyze_query(request.query)
-    
-    # 2. Agent: Decide necessary actions based on intent
-    agent_decision = await agent.decide_action(intent_analysis)
-
-    plugin_context = ""
-    search_query = request.query
-    # 2.5 Process Image if provided (Vision API)
-    if getattr(request, "image_data", None):
-        vision_result = await vision.extract_text_from_image(request.image_data)
-        plugin_context += "\n[사용자 첨부 이미지 분석 결과 (Vision AI)]\n" + vision_result + "\n"
-        search_query += " " + vision_result[:200] # Use part of the image text for semantic search constraints
-
-    # 3. Add keywords to query if it's a legal question
-    if intent_analysis.get("is_legal_question") and intent_analysis.get("keywords"):
-        search_query += " " + " ".join(intent_analysis["keywords"])
-
-    # 4. Execute plugins based on agent decision
-    if agent_decision.get("requires_precedent_search") and intent_analysis.get("keywords"):
-        precedents = search_precedents(intent_analysis["keywords"])
-        plugin_context += "\n[관련 판례/재결례 정보]\n" + json.dumps(precedents, ensure_ascii=False) + "\n"
-
-    if agent_decision.get("requires_calculator"):
-        # Very naive implementation for demonstration: extracting a hardcoded salary if we could, 
-        # but here we just append the calculation logic directly so the LLM can use the formulas or references 
-        # For a full implementation, we'd use LLM to extract salary/days from `request.query` first.
-        plugin_context += "\n[수당 계산기 참고 정보]\n해고예고수당: 월급 ÷ 209 × 8 × 30\n퇴직금: (월급 × 3 ÷ 90) × 30 × (근무일수 ÷ 365)\n사용자가 명시한 금액이 있다면 위 공식으로 검증하세요.\n"
-
-    # 5. Get RAG response using the enriched query
-    result = await checker.check_fact_with_history(
-        query=search_query, 
-        chat_history=history, 
-        plugin_context=plugin_context
+    # 비즈니스 로직은 CheckService에 위임
+    return await check_service.execute(
+        db=db,
+        user_id=user_id,
+        query=request.query,
+        session_id=session_id,
+        image_data=getattr(request, "image_data", None),
     )
-    
-    raw_parsed_result = result["result"]
-    verdict_str = raw_parsed_result.get("verdict", "ERROR").upper()
-    
-    # 6. Output Hook: Validate and Correct
-    parsed_result = await validator.validate_and_correct(raw_parsed_result)
-    
-    # Map the new 5-step fields to variables (using the SAFE corrected result)
-    summary_str = parsed_result.get("section_1_summary", "")
-    explanation = parsed_result.get("section_2_law_explanation", "")
-    example_case = parsed_result.get("section_3_real_case_example", "")
-    caution_note = parsed_result.get("section_4_caution", "")
-    counseling = parsed_result.get("section_5_counseling_recommendation", "")
-    
-    sources = result.get("sources", [])
-    
-    # Check for caching if we have revision_ids from the retrieval
-    revision_ids = [rid for rid in result.get("revision_ids", []) if rid is not None]
-    primary_revision_id = int(revision_ids[0]) if revision_ids else None
-    
-    if primary_revision_id:
-        cache = db.query(ExplanationCache).filter(ExplanationCache.article_revision_id == primary_revision_id).first()
-        if cache:
-            pass # TODO: handle caching with new schema later
-        else:
-            # Save new high-quality explanation to cache
-            new_cache = ExplanationCache(
-                article_revision_id=primary_revision_id,
-                plain_summary=explanation,
-                example_case=example_case,
-                caution_note=caution_note
-            )
-            db.add(new_cache)
-            # We don't commit immediately, it'll be committed with the rest
-
-    # Map string verdict to Enum — 정확한 매칭 우선, fallback으로 부분 매칭
-    verdict_map = {
-        "TRUE": VerdictEnum.TRUE,
-        "FALSE": VerdictEnum.FALSE,
-        "PARTIAL": VerdictEnum.PARTIAL,
-        "사실": VerdictEnum.TRUE,
-        "사실 아님": VerdictEnum.FALSE,
-        "일부 사실": VerdictEnum.PARTIAL,
-    }
-    verdict_enum = verdict_map.get(verdict_str)
-    if verdict_enum is None:
-        # 부분 매칭 fallback (순서 중요: 길이가 긴 것부터)
-        if "일부 사실" in verdict_str or "PARTIAL" in verdict_str:
-            verdict_enum = VerdictEnum.PARTIAL
-        elif "사실 아님" in verdict_str or "FALSE" in verdict_str:
-            verdict_enum = VerdictEnum.FALSE
-        elif "사실" in verdict_str or "TRUE" in verdict_str:
-            verdict_enum = VerdictEnum.TRUE
-        else:
-            logger.warning(f"Unknown verdict string: {verdict_str}")
-            verdict_enum = VerdictEnum.PARTIAL
-
-    # Save ClaimCheck record
-    claim_check = ClaimCheck(
-        claim_text=request.query,
-        verdict=verdict_enum,
-        explanation=explanation
-    )
-    db.add(claim_check)
-    
-    # We could link the revision here if our retriever returned the revision IDs.
-    if primary_revision_id:
-        rev_obj = db.query(LawArticleRevision).filter(LawArticleRevision.id == primary_revision_id).first()
-        if rev_obj:
-            claim_check.revisions.append(rev_obj)
-    
-    # Add AI message to DB (storing as JSON string for now)
-    ai_msg = ChatMessage(session_id=session_id, role="ai", content=json.dumps(parsed_result, ensure_ascii=False))
-    db.add(ai_msg)
-    db.commit()
-
-    return {
-        "session_id": session_id,
-        "result": parsed_result,
-        "sources": sources,
-        "intent_analysis": intent_analysis,
-        "agent_decision": agent_decision
-    }
 
 @router.get("/sessions")
 def get_user_sessions(user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
@@ -321,4 +193,3 @@ async def generate_document_template(request: TemplateRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-

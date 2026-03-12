@@ -1,13 +1,14 @@
-from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 import logging
+
+from app.core.llm import get_mini_llm
 
 logger = logging.getLogger(__name__)
 
 class ContextCompressor:
     def __init__(self):
-        self.llm = ChatOpenAI(model="gpt-4o-mini", temperature=0) # gpt-4o-mini is cost effective and good enough for summarization
+        self.llm = get_mini_llm()
         self.parser = StrOutputParser()
 
     async def compress_documents(self, query: str, docs: list) -> str:

@@ -1,14 +1,13 @@
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
-import json
 import logging
+
+from app.core.llm import get_main_llm
 
 logger = logging.getLogger(__name__)
 
 class VisionAnalyzer:
     def __init__(self):
-        # We use gpt-4o as it has native vision capabilities and is usually the default anyway
-        self.llm = ChatOpenAI(model="gpt-4o", temperature=0, max_tokens=1000)
+        self.llm = get_main_llm(max_tokens=1000)
 
     async def extract_text_from_image(self, base64_image: str) -> str:
         """

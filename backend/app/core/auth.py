@@ -5,14 +5,14 @@
 
 TODO: 프로덕션 환경에서는 JWT 토큰 기반 인증으로 교체 필요
 """
-import os
 import logging
 
 from fastapi import Header, HTTPException
+from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
+ADMIN_API_KEY = get_settings().ADMIN_API_KEY
 
 
 async def get_current_user_id(

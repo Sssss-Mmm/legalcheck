@@ -1,10 +1,11 @@
 from pydantic import BaseModel, Field
 from typing import List
-from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 import json
 import logging
+
+from app.core.llm import get_main_llm, get_mini_llm
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ class IntentResult(BaseModel):
 
 class InputAnalyzer:
     def __init__(self):
-        self.llm = ChatOpenAI(model="gpt-4o", temperature=0)
+        self.llm = get_main_llm()
         self.parser = JsonOutputParser(pydantic_object=IntentResult)
 
     async def analyze_query(self, query: str) -> dict:
@@ -61,7 +62,7 @@ class InputAnalyzer:
 
 class OutputValidator:
     def __init__(self):
-        self.llm = ChatOpenAI(model="gpt-4o-mini", temperature=0) # Use faster/cheaper model for simple correction
+        self.llm = get_mini_llm()  # 간단한 교정용이므로 경량 모델 사용
         
     async def validate_and_correct(self, result: dict) -> dict:
         """
