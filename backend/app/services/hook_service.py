@@ -4,6 +4,9 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 class IntentResult(BaseModel):
     intent: str = Field(description="사용자 질문의 핵심 의도 (예: 부당해고 가능성, 체불임금 계산 등)")
@@ -110,6 +113,6 @@ class OutputValidator:
             return corrected_json
             
         except Exception as e:
-            print(f"Output Validation failed: {e}")
+            logger.error(f"Output Validation failed: {e}")
             # Fallback to the original output if validation chain fails
             return result

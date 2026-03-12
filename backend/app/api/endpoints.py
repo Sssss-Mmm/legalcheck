@@ -1,3 +1,6 @@
+import json
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, desc, func
@@ -5,6 +8,7 @@ from sqlalchemy import or_, desc, func
 from app.models import User, ChatSession, ChatMessage, ClaimCheck, VerdictEnum, LawArticleRevision, ExplanationCache, LawArticle, Law
 from app.schemas import LoginPayload, UserResponse, CheckRequest, TemplateRequest, TemplateResponse
 from app.core.database import get_db
+from app.core.auth import get_current_user_id
 from app.services.rag_service import LegalFactChecker
 from app.services.hook_service import InputAnalyzer, OutputValidator
 from app.services.agent_service import RoutingAgent
@@ -12,7 +16,8 @@ from app.services.vision_service import VisionAnalyzer
 from app.services.template_service import DocumentTemplateGenerator
 from app.plugins.precedent_search import search_precedents
 from app.plugins.calculator import calculate_dismissal_notice_allowance, calculate_severance_pay
-import json
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 checker = LegalFactChecker()
@@ -26,35 +31,23 @@ template_generator = DocumentTemplateGenerator()
 def read_root():
     return {"status": "ok", "message": "Legal Fact Checker API is running"}
 
-@router.get("/debug/docx")
-def debug_docx():
-    import os
-    try:
-        files = os.listdir("/home/sssssmmm/legalcheck/")
-        return {"files": [f for f in files if "docx" in f.lower() or "pdf" in f.lower() or "api" in f.lower()]}
-    except Exception as e:
-        return {"error": str(e)}
-
 @router.get("/search/articles")
 def search_articles(query: str = Query(..., description="검색할 키워드"), db: Session = Depends(get_db)):
     """조문 키워드 검색 API (실시간 API 연동 하이브리드)"""
     from app.plugins.law_db import search_law_articles
     
     # 1. 실시간 데이터포털 API를 통해 먼저 상위 법령(예: '주택', '근로기준법')으로 검색 시도
-    # 법률, 시행령, 시행규칙 당 최대 50개의 조문을 가져와 광범위한 검색결과 제공
     api_results = search_law_articles(law_name=query, keyword="", limit=50)
     
     results = []
     
-    # API 호출 실패로 발생한 에러 메시지(결과값이 1개이고 조문번호가 '-')인지 검증
-    # 만일 에러 메시지일 경우 무시하고 로컬 DB로 넘어감
+    # API 호출 실패로 발생한 에러 메시지인지 검증
     is_api_error = False
     if len(api_results) == 1 and api_results[0].get("조문번호") == "-":
         is_api_error = True
 
     if api_results and not is_api_error:
         for idx, res in enumerate(api_results):
-            # 조문제목과 내용을 합쳐서 프론트엔드 파싱 규격에 맞게 변환
             content_preview = f"[{res['조문제목']}] {res['조문내용']}"
             if len(content_preview) > 500:
                 content_preview = content_preview[:500] + "..."
@@ -66,15 +59,18 @@ def search_articles(query: str = Query(..., description="검색할 키워드"), 
                 "revision_id": f"api_{idx}"
             })
     else:
-        # 2. 결과가 없거나(법령명 매칭 실패), 연동 오류일 경우 로컬 DB 전문검색으로 Fallback
-        revisions = db.query(LawArticleRevision).filter(LawArticleRevision.content.ilike(f"%{query}%")).limit(10).all()
+        # 2. 로컬 DB 전문검색 Fallback — LIKE 와일드카드 이스케이프
+        escaped_query = query.replace("%", "\\%").replace("_", "\\_")
+        revisions = db.query(LawArticleRevision).filter(
+            LawArticleRevision.content.ilike(f"%{escaped_query}%")
+        ).limit(10).all()
         for rev in revisions:
             article = db.query(LawArticle).filter(LawArticle.id == rev.article_id).first()
             law = db.query(Law).filter(Law.id == article.law_id).first() if article else None
             results.append({
                 "law_name": law.name if law else "Unknown",
                 "article_number": article.article_number if article else "Unknown",
-                "content": rev.content[:200] + "...", # Preview
+                "content": rev.content[:200] + "...",
                 "revision_id": rev.id
             })
             
@@ -97,7 +93,11 @@ def login(payload: LoginPayload, db: Session = Depends(get_db)):
     return user
 
 @router.post("/check")
-async def check_fact(request: CheckRequest, user_id: int, db: Session = Depends(get_db)):
+async def check_fact(
+    request: CheckRequest,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
     # Validate user
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -176,7 +176,7 @@ async def check_fact(request: CheckRequest, user_id: int, db: Session = Depends(
     sources = result.get("sources", [])
     
     # Check for caching if we have revision_ids from the retrieval
-    revision_ids = result.get("revision_ids", [])
+    revision_ids = [rid for rid in result.get("revision_ids", []) if rid is not None]
     primary_revision_id = int(revision_ids[0]) if revision_ids else None
     
     if primary_revision_id:
@@ -194,15 +194,27 @@ async def check_fact(request: CheckRequest, user_id: int, db: Session = Depends(
             db.add(new_cache)
             # We don't commit immediately, it'll be committed with the rest
 
-    # Map string verdict to Enum
-    if "일부 사실" in verdict_str or "PARTIAL" in verdict_str:
-        verdict_enum = VerdictEnum.PARTIAL
-    elif "사실 아님" in verdict_str or "FALSE" in verdict_str:
-        verdict_enum = VerdictEnum.FALSE
-    elif "사실" in verdict_str or "TRUE" in verdict_str:
-        verdict_enum = VerdictEnum.TRUE
-    else:
-        verdict_enum = VerdictEnum.PARTIAL # Defaulting on error
+    # Map string verdict to Enum — 정확한 매칭 우선, fallback으로 부분 매칭
+    verdict_map = {
+        "TRUE": VerdictEnum.TRUE,
+        "FALSE": VerdictEnum.FALSE,
+        "PARTIAL": VerdictEnum.PARTIAL,
+        "사실": VerdictEnum.TRUE,
+        "사실 아님": VerdictEnum.FALSE,
+        "일부 사실": VerdictEnum.PARTIAL,
+    }
+    verdict_enum = verdict_map.get(verdict_str)
+    if verdict_enum is None:
+        # 부분 매칭 fallback (순서 중요: 길이가 긴 것부터)
+        if "일부 사실" in verdict_str or "PARTIAL" in verdict_str:
+            verdict_enum = VerdictEnum.PARTIAL
+        elif "사실 아님" in verdict_str or "FALSE" in verdict_str:
+            verdict_enum = VerdictEnum.FALSE
+        elif "사실" in verdict_str or "TRUE" in verdict_str:
+            verdict_enum = VerdictEnum.TRUE
+        else:
+            logger.warning(f"Unknown verdict string: {verdict_str}")
+            verdict_enum = VerdictEnum.PARTIAL
 
     # Save ClaimCheck record
     claim_check = ClaimCheck(
@@ -232,7 +244,7 @@ async def check_fact(request: CheckRequest, user_id: int, db: Session = Depends(
     }
 
 @router.get("/sessions")
-def get_user_sessions(user_id: int, db: Session = Depends(get_db)):
+def get_user_sessions(user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     sessions = db.query(ChatSession).filter(ChatSession.user_id == user_id).order_by(desc(ChatSession.updated_at)).all()
     return {
         "sessions": [
@@ -246,7 +258,7 @@ def get_user_sessions(user_id: int, db: Session = Depends(get_db)):
     }
 
 @router.get("/sessions/{session_id}")
-def get_session_details(session_id: int, user_id: int, db: Session = Depends(get_db)):
+def get_session_details(session_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     session = db.query(ChatSession).filter(ChatSession.id == session_id, ChatSession.user_id == user_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -261,7 +273,7 @@ def get_session_details(session_id: int, user_id: int, db: Session = Depends(get
             try:
                 data = json.loads(msg.content)
                 formatted_messages.append({"role": "ai", "content": "", **data})
-            except:
+            except (json.JSONDecodeError, TypeError, ValueError):
                 formatted_messages.append({"role": "ai", "content": msg.content})
                 
     return {
@@ -272,7 +284,7 @@ def get_session_details(session_id: int, user_id: int, db: Session = Depends(get
     }
 
 @router.post("/sessions/{session_id}/bookmark")
-def toggle_bookmark(session_id: int, user_id: int, db: Session = Depends(get_db)):
+def toggle_bookmark(session_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     session = db.query(ChatSession).filter(ChatSession.id == session_id, ChatSession.user_id == user_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -282,7 +294,7 @@ def toggle_bookmark(session_id: int, user_id: int, db: Session = Depends(get_db)
     return {"id": session.id, "is_bookmarked": session.is_bookmarked}
 
 @router.delete("/sessions/{session_id}")
-def delete_session(session_id: int, user_id: int, db: Session = Depends(get_db)):
+def delete_session(session_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     session = db.query(ChatSession).filter(ChatSession.id == session_id, ChatSession.user_id == user_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
