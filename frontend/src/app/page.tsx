@@ -523,11 +523,15 @@ export default function Home() {
                                 )}
 
                                 {msg.section_3_real_case_example && (
-                                  <div className="bg-gray-900/40 p-3 rounded-lg border border-gray-700/30 mt-3">
-                                    <h4 className="text-sm text-indigo-400 font-bold mb-1 flex items-center">
-                                      <span className="mr-2">💡</span>현실 적용 예시
+                                  <div className="bg-gradient-to-br from-indigo-900/30 to-gray-900/50 p-4 rounded-xl border border-indigo-500/40 mt-3 shadow-sm relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-500/10 rounded-bl-full pointer-events-none"></div>
+                                    <h4 className="text-sm text-indigo-300 font-bold mb-2 flex items-center">
+                                      <span className="mr-2 text-lg">🏛️</span> 
+                                      <span className="tracking-wide">관련 핵심 판례 및 현실 적용 예시</span>
                                     </h4>
-                                    <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{msg.section_3_real_case_example}</p>
+                                    <p className="text-[14.5px] text-gray-200 leading-relaxed whitespace-pre-wrap pl-1 border-l-[3px] border-indigo-500/60 ml-1 py-1">
+                                      {msg.section_3_real_case_example}
+                                    </p>
                                   </div>
                                 )}
 

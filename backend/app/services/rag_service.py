@@ -20,7 +20,7 @@ class FactCheckResult(BaseModel):
     verdict: str = Field(description="판정 결과: '사실', '일부 사실', '사실 아님', '추가 판단 필요' 중 하나")
     section_1_summary: str = Field(description="1️⃣ 핵심 요약 (3~5줄 이내)")
     section_2_law_explanation: str = Field(description="2️⃣ 법 조문 기준 설명 (관련 법 이름, 조항 번호, 쉬운 해석)")
-    section_3_real_case_example: str = Field(description="3️⃣ 현실 적용 예시 (일반인이 이해할 수 있는 사례)")
+    section_3_real_case_example: str = Field(description="3️⃣ 현실 적용 예시 및 관련 판례 (제공된 [관련 판례/재결례 정보]가 있다면 반드시 이를 요약해서 포함할 것. 사건명과 판결요지를 명시)")
     section_4_caution: str = Field(description="4️⃣ 주의사항 (예외 상황, 오해하기 쉬운 부분, 분쟁 가능성)")
     section_5_counseling_recommendation: str = Field(description="5️⃣ 법률 상담 권장 여부 (필요시 '정확한 판단은 노무사/변호사 상담이 필요합니다.' 명시)")
     section_6_suggested_followups: list[str] = Field(description="6️⃣ 추천 후속 질문 3가지 (사용자의 현재 상황에서 궁금해할 만한 이어지는 질문)")

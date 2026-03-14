@@ -79,9 +79,9 @@ def search_precedents(keywords: list) -> list:
         logger.error(f"Error fetching precedent from DATA.GO.KR: {e}")
         # API 인증 대기(1~2시간) 혹은 네트워크 오류 시 Fallback
         results.append({
-            "사건명": f"판례 검색 대기 (키워드: {query})",
-            "사건번호": "데이터포털 연동 중",
-            "판결요지": f"공공데이터포털 API 연동 대기 중이거나 해당 스펙을 지원하지 않습니다. 에러내용: {e}"
+            "사건명": "관련 판례를 일시적으로 불러올 수 없습니다.",
+            "사건번호": "-",
+            "판결요지": "현재 공공데이터포털(법원 판례) 서버와의 통신 지연으로 인해 일시적으로 유사 판례를 제공할 수 없습니다. 일반적인 법리적 해석을 바탕으로 판단해 주십시오."
         })
             
     return results
