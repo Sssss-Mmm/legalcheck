@@ -1,16 +1,17 @@
 # Legal Fact Checker (법률 팩트체커)
 
-일반인이 근로기준법 등 생활 법률을 쉽게 이해하고 확인할 수 있도록 돕는 AI 기반 "법령 검증 및 팩트체크" 서비스입니다. 단순한 Q&A 챗봇을 넘어, 법률적 사실을 구조화하고 특정 시점의 개정 법령을 바탕으로 판정하는 **팩트체크 엔진**을 목표로 합니다.
+일반인이 근로기준법 등 생활 법률을 쉽게 이해하고 확인할 수 있도록 돕는 AI 기반 "법령 검증 및 팩트체크" 서비스입니다. 단순한 Q&A 챗봇을 넘어, 법률적 사실을 구조화하고 특정 시점의 개정 법령 및 판례를 바탕으로 판정하는 **팩트체크 엔진**을 목표로 합니다.
 
 ---
 
 ## ✨ 주요 기능 (Features)
 
-### 1. ⚖️ 법령 기반 팩트체크 엔진 (RAG 파이프라인)
-- **사용자 주장 검증**: "회사가 월급을 2개월 안 줘도 된다"는 등의 주장을 입력하면 AI가 관련 법 조문을 검색하여 사실 여부를 판정합니다.
-- **구조화된 판정 결과**: LLM이 줄글이 아닌 일관된 형식(JSON)으로 답변을 반환합니다.
+### 1. ⚖️ 법령 및 판례 기반 팩트체크 엔진 (RAG 파이프라인)
+- **사용자 주장 검증**: "회사가 월급을 2개월 안 줘도 된다"는 등의 주장을 입력하면 AI가 관련 법 조문과 판례를 검색하여 사실 여부를 판정합니다.
+- **판례 검색 통합 (Precedent Search)**: 단순 법조문을 넘어 실제 법원 판례 데이터를 참고하여 더욱 정확하고 현실적인 법적 해석을 제공합니다.
+- **구조화된 판정 결과**: LLM이 일관된 형식(JSON)으로 답변을 반환합니다.
   - **판정 (Verdict)**: `TRUE`(사실), `PARTIAL`(일부 사실), `FALSE`(사실 아님)
-  - **쉬운 설명 (Explanation)**: 근거 조항(예: 근로기준법 제36조)과 함께 일반인의 눈높이에 맞춘 해석
+  - **쉬운 설명 (Explanation)**: 근거 조항 및 판례와 함께 일반인의 눈높이에 맞춘 해석
   - **현실 적용 사례 (Example)**: 이해하기 쉬운 구체적인 예시 제공
   - **주의사항 (Caution)**: 예외 조건이나 판례상 달라질 수 있는 부분 안내
 
@@ -23,9 +24,9 @@
 - **맥락 인식 검증**: 추출된 문서의 내용을 바탕으로 사용자 상황에 훨씬 더 정확하고 구체화된 팩트체크 정보를 제공합니다.
 
 ### 4. 🗄️ 체계적인 법률 데이터베이스 스키마
-법률 서비스에 필수적인 **개정 이력 관리**와 **캐싱**을 지원하도록 데이터베이스가 설계되었습니다.
+법률 서비스에 필수적인 개정 이력 관리와 확장을 지원하도록 **PostgreSQL** 기반으로 설계되었습니다.
 - **`Law` & `LawArticle`**: 기본 법령과 조문 정보 (예: 근로기준법 제36조)
-- **`LawArticleRevision` (개정 이력)**: 법률 개정 시점(`effective_start_date`, `end_date`)을 추적하여, 과거 특정 시점 기준의 팩트체크를 지원
+- **`LawArticleRevision` (개정 이력)**: 법률 개정 시점을 추적하여 특정 시점 기준의 팩트체크를 지원
 - **`Topic`**: 조문별 태그(예: 임금체불, 퇴직금) 매핑을 통한 주제별 탐색 기능
 - **`ClaimCheck`**: 사용자의 팩트체크 질문과 판정 결과를 DB에 기록하여 추후 오답 노트 및 파인튜닝 데이터로 활용
 - **`ExplanationCache`**: LLM의 답변 비용 절감을 위한 "쉬운 설명" 캐싱 기능
@@ -49,7 +50,7 @@
 
 ```mermaid
 graph TD
-    User([👨‍💻 사용자]) -->|1. 팩트체크 요청 (+이미지)| Frontend[Next.js Frontend]
+    User([👨‍💻 사용자]) -->|1. 팩트체크 요청 (+이미지, 판례 검색)| Frontend[Next.js Frontend]
     User -->|2. 법률 문서 초안 생성 요청| Frontend
     Frontend -->|OAuth 인증| NextAuth[NextAuth.js]
     Frontend -- REST API --> Backend[FastAPI Backend]
@@ -58,7 +59,7 @@ graph TD
 
     subgraph Backend Services
         Backend --> Vision[👁️ Vision Service]
-        Backend --> RAG[🧠 RAG Service]
+        Backend --> RAG[🧠 RAG Service (법령 + 판례 검색)]
         Backend --> Agent[🤖 Agent & Check Service]
         Backend --> Template[📝 Template Service]
         Backend --> DataParsing[📄 파싱 엔진]
@@ -69,7 +70,7 @@ graph TD
     Agent -->|검증 및 생성| LLM[OpenAI API<br>(gpt-4o / gpt-4o-mini)]
     Template -->|문서 초안 생성| LLM
     
-    DataParsing -->|법조문 구조화/단편화| DB[(SQLite Database)]
+    DataParsing -->|법조문 구조화/단편화| DB[(PostgreSQL Database)]
     DataParsing -->|임베딩 저장| VectorDB
 
     Backend <-->|CRUD 및 캐싱| DB
@@ -82,14 +83,14 @@ graph TD
 
 ### Backend
 - **Framework**: FastAPI (Python 3.11+)
-- **Architecture**: Domain-Driven Design (DDD) 기반 서비스 레이어 분리 (Service, Core, Plugins)
-- **Database**: SQLite (향후 PostgreSQL + `pgvector` 전환 고려), SQLAlchemy (ORM), Alembic (Migration)
+- **Architecture**: Domain-Driven Design (DDD) 기반 서비스 레이어 분리 (Service, Core, Plugins), 중앙집중형 설정 및 로깅 연동
+- **Database**: PostgreSQL (`psycopg2`), SQLAlchemy (ORM), Alembic (Migration)
 - **AI / RAG**: LangChain, OpenAI API (`gpt-4o`, `gpt-4o-mini`), ChromaDB (Vector Store)
 - **Package Manager**: `uv`
 
 ### Frontend
-- **Framework**: Next.js 15 (App Router), React 19
-- **Styling**: Tailwind CSS
+- **Framework**: Next.js 16 (App Router), React 19
+- **Styling**: Tailwind CSS v4
 - **Authentication**: NextAuth.js (Google Provider)
 
 ---
@@ -99,10 +100,17 @@ graph TD
 ### 1. 필수 요구사항
 - Python 3.11 이상
 - `uv` (Python 패키지 관리자)
-- Node.js 18 이상
+- Node.js 18 이상 (최신 버전 권장)
+- Docker 및 Docker Compose (DB 실행용)
 - OpenAI API Key
 
-### 2. 백엔드 설정 (Backend)
+### 2. 데이터베이스 설정 (Docker)
+```bash
+# 최상위 경로에서 PostgreSQL DB 컨테이너 백그라운드 실행
+docker-compose up -d
+```
+
+### 3. 백엔드 설정 (Backend)
 ```bash
 cd backend
 
@@ -111,13 +119,13 @@ uv sync
 
 # 환경변수 설정
 cp .env.example .env
-# .env 파일을 열어 OPENAI_API_KEY 등의 환경변수를 입력하세요.
+# .env 파일을 열어 OPENAI_API_KEY, DATABASE_URL 등의 환경변수를 입력하세요.
 
 # 로컬 개발 서버 실행
 uv run fastapi dev app/main.py
 ```
 
-### 3. 프론트엔드 설정 (Frontend)
+### 4. 프론트엔드 설정 (Frontend)
 ```bash
 cd frontend
 
