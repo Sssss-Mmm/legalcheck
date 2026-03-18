@@ -41,7 +41,7 @@
 - **직관적인 결과 UI**: 팩트체크 판정에 따른 색상별 뱃지(TRUE/PARTIAL/FALSE) 및 요약/해석/사례 분리형 카드 레이아웃 제공
 - **사이드바 히스토리 및 북마크**: 과거 질문 및 검증 세션 기록을 손쉽게 확인하고, 중요한 세션은 북마크하여 별도 관리 가능
 - **실시간 인기 팩트체크 추천**: 처음 방문한 사용자도 쉽게 질문해볼 수 있도록 안내
-- **스마트 후속 질문 추천**: AI 답변 완료 후, 현재 대화 맥락에 맞는 예상 질문을 자동으로 제안하여 심도 있는 법률 탐색 지원
+- **스마트 후속 질문 추천**: AI 답변 완료 후, 현재 대화 맥락에 맞는 예상 시나리오 중심의 법률 정보 확장을 돕습니다.
 - **결과 원클릭 공유**: 검증된 팩트체크 결과를 타인과 빠르고 깔끔하게 공유할 수 있는 복사 기능
 
 ---
@@ -101,25 +101,36 @@ graph TD
 - Python 3.11 이상
 - `uv` (Python 패키지 관리자)
 - Node.js 18 이상 (최신 버전 권장)
-- Docker 및 Docker Compose (DB 실행용)
+- Docker 및 Docker Compose (DB 및 백엔드 실행용)
 - OpenAI API Key
 
-### 2. 데이터베이스 설정 (Docker)
+### 2. 백엔드 및 데이터베이스 실행 (Docker)
+Docker Compose를 사용하여 데이터베이스(PostgreSQL)와 백엔드(FastAPI) 컨테이너를 함께 실행합니다.
+
+먼저 백엔드 환경변수를 설정합니다:
 ```bash
-# 최상위 경로에서 PostgreSQL DB 컨테이너 백그라운드 실행
-docker-compose up -d
+cd backend
+cp .env.example .env
+# .env 파일을 열어 OPENAI_API_KEY 등 필요한 환경변수를 입력하세요.
+cd ..
 ```
 
-### 3. 백엔드 설정 (Backend)
+최상위 경로에서 백그라운드로 컨테이너를 빌드하고 실행합니다:
+```bash
+docker-compose up -d --build
+```
+> **Tip:** WSL 환경에서 Docker 명령어 실행 시 `Permission denied` 오류가 발생한다면, Windows에 **Docker Desktop**을 설치한 뒤 설정(`Settings > Resources > WSL Integration`)에서 현재 사용 중인 Ubuntu 배포판과의 연동을 켜주시면 권한 문제 없이 사용할 수 있습니다.
+
+### 3. 백엔드 로컬 직접 실행 (선택 사항)
+Docker를 사용하지 않고 로컬 환경에서 백엔드를 직접 실행하려면 아래 방법을 참고하세요. (단, DB 컨테이너는 사전 실행이 필요합니다.)
 ```bash
 cd backend
 
 # 패키지 동기화 및 설치
 uv sync
 
-# 환경변수 설정
+# 환경변수 파일이 없다면 생성
 cp .env.example .env
-# .env 파일을 열어 OPENAI_API_KEY, DATABASE_URL 등의 환경변수를 입력하세요.
 
 # 로컬 개발 서버 실행
 uv run fastapi dev app/main.py
