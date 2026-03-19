@@ -84,9 +84,9 @@ graph TD
 ### Backend
 - **Framework**: FastAPI (Python 3.11+)
 - **Architecture**: Domain-Driven Design (DDD) 기반 서비스 레이어 분리 (Service, Core, Plugins), 중앙집중형 설정 및 로깅 연동
-- **Database**: PostgreSQL (`psycopg2`), SQLAlchemy (ORM), Alembic (Migration)
+- **Database**: PostgreSQL (`SQLAlchemy` ORM, `Alembic` Migration)
 - **AI / RAG**: LangChain, OpenAI API (`gpt-4o`, `gpt-4o-mini`), ChromaDB (Vector Store)
-- **Package Manager**: `uv`
+- **Package Manager**: `uv` (빠른 의존성 관리 및 실행 환경)
 
 ### Frontend
 - **Framework**: Next.js 16 (App Router), React 19
@@ -144,7 +144,11 @@ cd frontend
 npm install
 
 # 환경변수 세팅
-# .env.local 파일에 NEXTAUTH_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET 등을 입력하세요.
+# .env.local 파일에 다음 변수들을 필수로 입력하세요:
+# - NEXTAUTH_URL=http://localhost:3000
+# - GOOGLE_CLIENT_ID=...
+# - GOOGLE_CLIENT_SECRET=...
+# - NEXT_PUBLIC_API_URL=http://localhost:8000
 
 # 개발 서버 실행
 npm run dev
