@@ -29,7 +29,7 @@ function getUserId(session: any): string | null {
 
 export default function Home() {
   const { data: session, status } = useSession();
-  const [activeTab, setActiveTab] = useState<"chat" | "search" | "history">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "search" | "history" | "template">("chat");
   const [popularClaims, setPopularClaims] = useState<string[]>([]);
   const [sessionHistory, setSessionHistory] = useState<any[]>([]);
   const [query, setQuery] = useState("");
@@ -40,6 +40,36 @@ export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const [templateInput, setTemplateInput] = useState("");
+  const [generatedTemplate, setGeneratedTemplate] = useState<{ title: string; content: string } | null>(null);
+  const [isGeneratingTabTemplate, setIsGeneratingTabTemplate] = useState(false);
+
+  const handleGenerateTabTemplate = async () => {
+    if (!templateInput.trim()) return;
+    setIsGeneratingTabTemplate(true);
+    try {
+      const res = await fetch(`${API_URL}/claims/template`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          claim_text: "사용자 상황 기입",
+          explanation: templateInput
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setGeneratedTemplate({ title: data.document_title, content: data.document_content });
+      } else {
+        alert("문서 초안 생성에 실패했습니다.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("서버 오류로 인해 문서 초안 생성에 실패했습니다.");
+    } finally {
+      setIsGeneratingTabTemplate(false);
+    }
+  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -441,6 +471,12 @@ export default function Home() {
                   조문 검색
                 </button>
                 <button
+                  onClick={() => setActiveTab("template")}
+                  className={`pb-2 px-2 text-sm font-medium transition-colors ${activeTab === "template" ? "text-indigo-400 border-b-2 border-indigo-400" : "text-gray-400 hover:text-gray-200"}`}
+                >
+                  문서 초안 작성
+                </button>
+                <button
                   onClick={() => setActiveTab("history")}
                   className={`md:hidden pb-2 px-2 text-sm font-medium transition-colors ${activeTab === "history" ? "text-indigo-400 border-b-2 border-indigo-400" : "text-gray-400 hover:text-gray-200"}`}
                 >
@@ -749,6 +785,58 @@ export default function Home() {
                           </p>
                         </div>
                       ))
+                    )}
+                  </div>
+                </div>
+              ) : activeTab === "template" ? (
+                <div className="flex-grow flex flex-col h-full overflow-hidden pb-4">
+                  <h2 className="text-xl font-bold mb-4 text-indigo-300 flex items-center">
+                    <span className="mr-2">📄</span>문서 초안 작성
+                  </h2>
+                  <div className="flex-grow overflow-y-auto space-y-4 pr-2 custom-scrollbar pb-6 rounded-xl">
+                    <div className="bg-gray-800 border border-gray-700 rounded-xl p-5 shadow-sm">
+                      <p className="text-sm text-gray-300 mb-4">
+                        팩트체크를 거치지 않고 직접 상황을 입력하여 문서(내용증명, 진정서 등)를 자동 생성할 수 있습니다. 
+                      </p>
+                      <textarea
+                        value={templateInput}
+                        onChange={(e) => setTemplateInput(e.target.value)}
+                        placeholder="예: 2023년 1월부터 3개월간 월급 300만원씩 총 900만원이 밀렸고 사업주는 연락을 피하고 있습니다."
+                        className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white focus:outline-none focus:border-indigo-500 min-h-[150px] mb-4"
+                      />
+                      <button
+                        onClick={handleGenerateTabTemplate}
+                        disabled={isGeneratingTabTemplate || !templateInput.trim()}
+                        className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800 disabled:opacity-50 text-white font-semibold py-3 px-4 rounded-xl transition-all shadow-sm flex items-center justify-center"
+                      >
+                        {isGeneratingTabTemplate ? (
+                          <><span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"></span>문서 초안 생성 중...</>
+                        ) : "법적 대응 문서 초안 생성하기"}
+                      </button>
+                    </div>
+
+                    {generatedTemplate && (
+                      <div className="bg-gray-900 border border-indigo-500 p-5 rounded-xl shadow-lg mt-4 mb-4">
+                        <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-3">
+                          <h4 className="text-lg font-bold text-white flex items-center">
+                            <span className="text-indigo-400 mr-2">📄</span>{generatedTemplate.title}
+                          </h4>
+                          <button
+                            onClick={() => handleCopyTemplate(generatedTemplate.content)}
+                            className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg transition text-gray-200 flex items-center shadow-sm border border-gray-600 font-medium text-sm"
+                          >
+                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                            복사
+                          </button>
+                        </div>
+                        <div className="bg-gray-800 p-5 rounded-xl font-mono text-sm text-gray-300 whitespace-pre-wrap leading-relaxed border border-gray-700/50">
+                          {generatedTemplate.content}
+                        </div>
+                        <div className="mt-4 bg-yellow-900/20 text-yellow-500 text-sm p-3 rounded-lg border border-yellow-700/30 flex items-start">
+                          <span className="mr-2 mt-0.5 text-lg">⚠️</span>
+                          <span className="leading-relaxed">이 양식은 AI 가 생성한 참고용 초안이며 법적 효력을 보장하지 않습니다. 실제 공식 제출 전에 노무사나 변호사 등 전문가의 검토를 받으시기 바랍니다.</span>
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>
