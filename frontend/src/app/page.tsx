@@ -10,6 +10,7 @@ interface ChatMessage {
   content: string; // Used for user input or raw text
   // AI JSON response fields:
   verdict?: string;
+  is_clarification?: boolean;
   section_1_summary?: string;
   section_2_law_explanation?: string;
   section_3_real_case_example?: string;
@@ -305,7 +306,8 @@ export default function Home() {
             role: "ai",
             content: "",
             verdict: data.result?.verdict || "ERROR",
-            section_1_summary: data.result?.section_1_summary || "응답을 생성할 수 없습니다.",
+            is_clarification: data.result?.is_clarification,
+            section_1_summary: data.result?.is_clarification ? undefined : (data.result?.section_1_summary || "응답을 생성할 수 없습니다."),
             section_2_law_explanation: data.result?.section_2_law_explanation,
             section_3_real_case_example: data.result?.section_3_real_case_example,
             section_4_caution: data.result?.section_4_caution,
@@ -529,84 +531,97 @@ export default function Home() {
                               </div>
                             ) : (
                               <div className="flex flex-col space-y-4">
-                                {/* Rendering parsed AI Response */}
-                                {msg.verdict && (
-                                  <div className="mb-2">
-                                    {getVerdictBadge(msg.verdict)}
-                                  </div>
-                                )}
-
-                                {msg.section_1_summary ? (
-                                  <div className="text-gray-100 font-medium leading-relaxed whitespace-pre-wrap text-[16px] mb-2 p-3 bg-gray-900/60 rounded-xl border border-gray-700/50">
-                                    <h4 className="text-sm text-indigo-300 font-bold mb-1 flex items-center">
-                                      <span className="mr-2">📝</span>핵심 요약
+                                {msg.is_clarification ? (
+                                  <div className="bg-indigo-900/40 p-5 rounded-2xl border border-indigo-500/50 shadow-inner mt-2 mb-2">
+                                    <h4 className="text-sm text-indigo-300 font-bold mb-3 flex items-center">
+                                      <span className="mr-2 text-lg">💡</span>추가 정보가 필요합니다
                                     </h4>
-                                    {msg.section_1_summary}
-                                  </div>
-                                ) : (
-                                  <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-                                )}
-
-                                {msg.section_2_law_explanation && (
-                                  <div className="text-gray-300 leading-relaxed whitespace-pre-wrap text-[15px] pt-2">
-                                    <h4 className="text-sm text-blue-300 font-bold mb-1 flex items-center">
-                                      <span className="mr-2">⚖️</span>법 조문 기준 설명
-                                    </h4>
-                                    <div className="pl-6 border-l-2 border-blue-500/30">
+                                    <p className="text-[15.5px] text-indigo-50 leading-relaxed whitespace-pre-wrap">
                                       {msg.section_2_law_explanation}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {msg.section_3_real_case_example && (
-                                  <div className="bg-gradient-to-br from-indigo-900/30 to-gray-900/50 p-4 rounded-xl border border-indigo-500/40 mt-3 shadow-sm relative overflow-hidden">
-                                    <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-500/10 rounded-bl-full pointer-events-none"></div>
-                                    <h4 className="text-sm text-indigo-300 font-bold mb-2 flex items-center">
-                                      <span className="mr-2 text-lg">🏛️</span> 
-                                      <span className="tracking-wide">관련 핵심 판례 및 현실 적용 예시</span>
-                                    </h4>
-                                    <p className="text-[14.5px] text-gray-200 leading-relaxed whitespace-pre-wrap pl-1 border-l-[3px] border-indigo-500/60 ml-1 py-1">
-                                      {msg.section_3_real_case_example}
                                     </p>
                                   </div>
-                                )}
+                                ) : (
+                                  <>
+                                    {/* Rendering parsed AI Response */}
+                                    {msg.verdict && (
+                                      <div className="mb-2">
+                                        {getVerdictBadge(msg.verdict)}
+                                      </div>
+                                    )}
 
-                                {msg.section_4_caution && (
-                                  <div className="bg-yellow-900/10 p-3 rounded-lg border border-yellow-700/30 mt-3">
-                                    <h4 className="text-sm text-yellow-500 font-bold mb-1 flex items-center">
-                                      <span className="mr-2">⚠️</span>주의사항
-                                    </h4>
-                                    <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{msg.section_4_caution}</p>
-                                  </div>
-                                )}
+                                    {msg.section_1_summary ? (
+                                      <div className="text-gray-100 font-medium leading-relaxed whitespace-pre-wrap text-[16px] mb-2 p-3 bg-gray-900/60 rounded-xl border border-gray-700/50">
+                                        <h4 className="text-sm text-indigo-300 font-bold mb-1 flex items-center">
+                                          <span className="mr-2">📝</span>핵심 요약
+                                        </h4>
+                                        {msg.section_1_summary}
+                                      </div>
+                                    ) : (
+                                      <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                                    )}
 
-                                {msg.section_5_counseling_recommendation && (
-                                  <div className="bg-red-900/10 p-3 rounded-lg border border-red-900/30 mt-3">
-                                    <h4 className="text-sm text-red-400 font-bold mb-1 flex items-center">
-                                      <span className="mr-2">👩‍⚖️</span>전문가 상담 건의
-                                    </h4>
-                                    <p className="text-sm text-red-200/80 leading-relaxed whitespace-pre-wrap">{msg.section_5_counseling_recommendation}</p>
-                                  </div>
-                                )}
+                                    {msg.section_2_law_explanation && (
+                                      <div className="text-gray-300 leading-relaxed whitespace-pre-wrap text-[15px] pt-2">
+                                        <h4 className="text-sm text-blue-300 font-bold mb-1 flex items-center">
+                                          <span className="mr-2">⚖️</span>법 조문 기준 설명
+                                        </h4>
+                                        <div className="pl-6 border-l-2 border-blue-500/30">
+                                          {msg.section_2_law_explanation}
+                                        </div>
+                                      </div>
+                                    )}
 
-                                {/* Suggested Follow-ups */}
-                                {msg.section_6_suggested_followups && msg.section_6_suggested_followups.length > 0 && (
-                                  <div className="mt-4 pt-3 border-t border-gray-600/50">
-                                    <h4 className="text-sm text-indigo-300 font-bold mb-3 flex items-center">
-                                      <span className="mr-2">💬</span>추천 후속 질문
-                                    </h4>
-                                    <div className="flex flex-wrap gap-2">
-                                      {msg.section_6_suggested_followups.map((q, qIdx) => (
-                                        <button
-                                          key={qIdx}
-                                          onClick={() => submitQuery(q)}
-                                          className="bg-gray-800 hover:bg-indigo-600/80 border border-indigo-500/50 text-indigo-200 hover:text-white px-4 py-2 rounded-full text-sm transition-all shadow-sm text-left"
-                                        >
-                                          {q}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  </div>
+                                    {msg.section_3_real_case_example && (
+                                      <div className="bg-gradient-to-br from-indigo-900/30 to-gray-900/50 p-4 rounded-xl border border-indigo-500/40 mt-3 shadow-sm relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-500/10 rounded-bl-full pointer-events-none"></div>
+                                        <h4 className="text-sm text-indigo-300 font-bold mb-2 flex items-center">
+                                          <span className="mr-2 text-lg">🏛️</span> 
+                                          <span className="tracking-wide">관련 핵심 판례 및 현실 적용 예시</span>
+                                        </h4>
+                                        <p className="text-[14.5px] text-gray-200 leading-relaxed whitespace-pre-wrap pl-1 border-l-[3px] border-indigo-500/60 ml-1 py-1">
+                                          {msg.section_3_real_case_example}
+                                        </p>
+                                      </div>
+                                    )}
+
+                                    {msg.section_4_caution && (
+                                      <div className="bg-yellow-900/10 p-3 rounded-lg border border-yellow-700/30 mt-3">
+                                        <h4 className="text-sm text-yellow-500 font-bold mb-1 flex items-center">
+                                          <span className="mr-2">⚠️</span>주의사항
+                                        </h4>
+                                        <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{msg.section_4_caution}</p>
+                                      </div>
+                                    )}
+
+                                    {msg.section_5_counseling_recommendation && (
+                                      <div className="bg-red-900/10 p-3 rounded-lg border border-red-900/30 mt-3">
+                                        <h4 className="text-sm text-red-400 font-bold mb-1 flex items-center">
+                                          <span className="mr-2">👩‍⚖️</span>전문가 상담 건의
+                                        </h4>
+                                        <p className="text-sm text-red-200/80 leading-relaxed whitespace-pre-wrap">{msg.section_5_counseling_recommendation}</p>
+                                      </div>
+                                    )}
+
+                                    {/* Suggested Follow-ups */}
+                                    {msg.section_6_suggested_followups && msg.section_6_suggested_followups.length > 0 && (
+                                      <div className="mt-4 pt-3 border-t border-gray-600/50">
+                                        <h4 className="text-sm text-indigo-300 font-bold mb-3 flex items-center">
+                                          <span className="mr-2">💬</span>추천 후속 질문
+                                        </h4>
+                                        <div className="flex flex-wrap gap-2">
+                                          {msg.section_6_suggested_followups.map((q, qIdx) => (
+                                            <button
+                                              key={qIdx}
+                                              onClick={() => submitQuery(q)}
+                                              className="bg-gray-800 hover:bg-indigo-600/80 border border-indigo-500/50 text-indigo-200 hover:text-white px-4 py-2 rounded-full text-sm transition-all shadow-sm text-left"
+                                            >
+                                              {q}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </>
                                 )}
 
                                 {/* Template Generation UI */}

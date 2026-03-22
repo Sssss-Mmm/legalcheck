@@ -143,6 +143,40 @@ class CheckService:
         db.add(ai_msg)
         db.commit()
 
+    async def _generate_clarification_question(self, query: str, agent_decision: dict, history: list[dict]) -> dict:
+        from langchain_core.prompts import ChatPromptTemplate
+        from langchain_core.output_parsers import JsonOutputParser
+        from app.core.llm import get_main_llm
+        
+        system_prompt = """당신은 법률 팩트체커 어시스턴트입니다.
+사용자의 질문에 대답하기 위해 필수적인 정보(근로시간, 상시근로자 수 등)가 누락되어 팩트체크를 진행할 수 없습니다.
+분석된 이유(reasoning)를 바탕으로, 사용자에게 필요한 정보를 자연스럽고 친절하게 되물어보는 질문을 1~2문장으로 작성하세요.
+
+반드시 아래 JSON 형식으로 응답하세요:
+{
+    "verdict": "UNCLEAR",
+    "section_2_law_explanation": "친절한 역질문 내용 작성",
+    "section_3_real_case_example": "",
+    "section_4_caution": ""
+}"""
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("user", f"사용자 질문: {query}\n\n누락 정보 분석 사유: {agent_decision.get('reasoning')}\n\n이전 대화 맥락: {history}")
+        ])
+        
+        llm = get_main_llm()
+        chain = prompt | llm | JsonOutputParser()
+        try:
+            return await chain.ainvoke({})
+        except Exception as e:
+            logger.error(f"Clarification generation failed: {e}")
+            return {
+                "verdict": "UNCLEAR",
+                "section_2_law_explanation": "사안을 판단하기 위해 추가적인 정보가 필요합니다. 당시 상황을 조금 더 자세히 설명해 주시겠어요?",
+                "section_3_real_case_example": "",
+                "section_4_caution": ""
+            }
+
     async def execute(self, db: Session, user_id: int, query: str, session_id: int | None = None, image_data: str | None = None) -> dict:
         """전체 팩트체크 파이프라인을 실행합니다."""
         # 1. 세션 관리
@@ -156,7 +190,22 @@ class CheckService:
 
         # 3. Input Hook & Agent
         intent_analysis = await self.analyzer.analyze_query(query)
-        agent_decision = await self.agent.decide_action(intent_analysis)
+        agent_decision = await self.agent.decide_action(intent_analysis, history)
+
+        # 3.5 Clarification Branch (역질문이 필요한 경우 RAG 스킵)
+        if agent_decision.get("requires_clarification"):
+            clarification_result = await self._generate_clarification_question(query, agent_decision, history)
+            clarification_result["is_clarification"] = True
+            
+            self.save_results(db, session_id, query, clarification_result, {"result": clarification_result})
+            
+            return {
+                "session_id": session_id,
+                "result": clarification_result,
+                "sources": [],
+                "intent_analysis": intent_analysis,
+                "agent_decision": agent_decision
+            }
 
         # 4. 플러그인 컨텍스트 빌드
         plugin_context, search_query = await self.build_plugin_context(
@@ -173,6 +222,7 @@ class CheckService:
         # 6. Output Hook
         raw_parsed_result = result["result"]
         parsed_result = await self.validator.validate_and_correct(raw_parsed_result)
+        parsed_result["is_clarification"] = False
 
         # 7. DB 저장
         self.save_results(db, session_id, query, parsed_result, result)

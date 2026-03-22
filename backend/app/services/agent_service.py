@@ -16,7 +16,7 @@ class RoutingAgent:
         self.llm = get_main_llm()
         self.parser = JsonOutputParser(pydantic_object=AgentAction)
 
-    async def decide_action(self, intent_data: dict) -> dict:
+    async def decide_action(self, intent_data: dict, chat_history: list[dict] = None) -> dict:
         system_prompt = """당신은 법률 팩트체커 시스템의 '두 번째 단계(Agent)'를 담당하는 판단 엔진입니다.
 앞 단계(Input Hook)에서 분석된 사용자의 질문 의도와 키워드 정보를 바탕으로, 이 질문에 대답하기 위해 어떤 외부 도구/플러그인이 필요한지 결정해야 합니다.
 
@@ -25,15 +25,20 @@ class RoutingAgent:
 2. **requires_precedent_search**: 사용자가 '부당해고', '직장내 괴롭힘' 등 법 조문만으로 흑백이 갈리지 않고 실제 법원이나 노동위원회의 과거 판정 사례를 참고해야 하는 경우 True로 설정합니다. 단순한 법령 문의(예: 최저임금이 얼마야?)는 False입니다.
 3. **requires_calculator**: '얼마를 받을 수 있는지', '수당 계산', '퇴직금', '월급' 등 계산 로직이 들어가는 질문일 경우 True로 설정합니다.
 4. **requires_clarification**: 사용자가 제공한 정보에 기간(언제부터 언제까지 일했는지), 규모(5인 미만 사업장 여부) 등 필수 법률 적용 요건이 심각하게 누락되어 팩트체크가 아예 불가능한 경우 True로 설정합니다.
+   *중요*: 이전 대화 맥락(History)이 주어질 경우, 사용자가 이미 이전에 핵심 정보(기간, 규모 등)를 제공했다면 requires_clarification을 False로 설정하세요.
 
 반드시 아래의 지시사항에 따라 JSON 형태로만 응답하세요.
 
 {format_instructions}
 """
         
+        user_message_content = f"앞 단계 분석 결과: {intent_data}"
+        if chat_history:
+            user_message_content += f"\n\n이전 대화 맥락(History): {chat_history}"
+
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
-            ("user", "앞 단계 분석 결과: {intent_data}")
+            ("user", user_message_content)
         ])
 
         chain = prompt | self.llm | self.parser
