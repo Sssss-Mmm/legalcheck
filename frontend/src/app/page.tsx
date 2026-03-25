@@ -41,6 +41,9 @@ export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const isAtBottom = useRef<boolean>(true);
+  const isNewMessage = useRef<boolean>(false);
 
   const [templateInput, setTemplateInput] = useState("");
   const [generatedTemplate, setGeneratedTemplate] = useState<{ title: string; content: string } | null>(null);
@@ -258,12 +261,24 @@ export default function Home() {
     }
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToBottom = (force = false) => {
+    if (force || isAtBottom.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
+  const handleChatScroll = () => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    const threshold = 80;
+    isAtBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
   };
 
   useEffect(() => {
-    scrollToBottom();
+    if (isNewMessage.current) {
+      scrollToBottom(true);
+      isNewMessage.current = false;
+    }
   }, [chatHistory]);
 
   const submitQuery = async (text: string, imageToUpload: string | null = null) => {
@@ -275,6 +290,7 @@ export default function Home() {
     if (imageToUpload === selectedImage) {
       setSelectedImage(null);
     }
+    isNewMessage.current = true;
     setChatHistory((prev) => [...prev, { role: "user", content: userQuery, attached_image: currentImage || undefined }]);
     setLoading(true);
 
@@ -379,7 +395,7 @@ export default function Home() {
       </header>
 
       {/* Main Content */}
-      <div className="flex-grow container mx-auto px-4 py-8 flex flex-col max-w-4xl max-h-[calc(100vh-80px)]">
+      <div className="flex-grow container mx-auto px-4 py-8 flex flex-col max-w-4xl overflow-hidden min-h-0">
         {!session ? (
           <div className="flex-grow flex flex-col items-center justify-center space-y-6 text-center h-full">
             <h2 className="text-4xl md:text-5xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-indigo-500 to-purple-500">
@@ -402,7 +418,7 @@ export default function Home() {
             </button>
           </div>
         ) : (
-          <div className="flex h-full overflow-hidden gap-6">
+          <div className="flex h-full overflow-hidden gap-6 min-h-0">
             {/* Sidebar (History) */}
             <div className="hidden md:flex flex-col w-72 bg-gray-900/40 rounded-2xl border border-gray-700/50 p-4 h-full flex-shrink-0 shadow-lg">
               <button
@@ -457,7 +473,7 @@ export default function Home() {
             </div>
 
             {/* Main Content Area */}
-            <div className="flex flex-col flex-grow h-full overflow-hidden">
+            <div className="flex flex-col flex-grow h-full overflow-hidden min-h-0">
               {/* Tabs */}
               <div className="flex space-x-4 mb-4 border-b border-gray-700/50 pb-2 flex-shrink-0">
                 <button
@@ -488,7 +504,7 @@ export default function Home() {
 
               {activeTab === "chat" ? (
                 <>
-                  <div className="flex-grow overflow-y-auto space-y-6 pr-2 custom-scrollbar pb-6 rounded-xl">
+                  <div ref={chatContainerRef} onScroll={handleChatScroll} className="flex-grow overflow-y-auto space-y-6 pr-2 custom-scrollbar pb-6 rounded-xl">
                     {chatHistory.length === 0 ? (
                       <div className="h-full flex flex-col items-center justify-center text-gray-500">
                         <p>궁금한 법률 질문을 편하게 입력해주세요.</p>
