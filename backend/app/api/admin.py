@@ -17,10 +17,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(verify_admin)])
 
-# DI 컨테이너에서 서비스 가져오기
-_services = get_services()
-pdf_parser = _services.pdf_parser
-
 @router.post("/laws", response_model=LawResponse)
 def create_law(law: LawCreate, db: Session = Depends(get_db)):
     db_law = Law(**law.model_dump())
@@ -47,8 +43,8 @@ def create_revision(revision: LawArticleRevisionCreate, background_tasks: Backgr
     article = db.query(LawArticle).filter(LawArticle.id == revision.article_id).first()
     if article:
         law = db.query(Law).filter(Law.id == article.law_id).first()
-        checker = _services.checker
-        background_tasks.add_task(checker.add_revisions, [{
+        services = get_services()
+        background_tasks.add_task(services.checker.add_revisions, [{
             "law_id": article.law_id,
             "article_id": article.id,
             "revision_id": db_revision.id,
@@ -80,12 +76,12 @@ async def upload_law_pdf(law_id: int, background_tasks: BackgroundTasks, file: U
         raise HTTPException(status_code=404, detail="Law not found")
 
     try:
+        services = get_services()
         file_content = await file.read()
-        created_articles, embedded_revisions = await pdf_parser.process_pdf(db, law_id, file_content)
+        created_articles, embedded_revisions = await services.pdf_parser.process_pdf(db, law_id, file_content)
         
         # 벡터 스토어 업데이트
-        checker = _services.checker
-        background_tasks.add_task(checker.add_revisions, embedded_revisions)
+        background_tasks.add_task(services.checker.add_revisions, embedded_revisions)
         
         return {
             "message": f"Successfully parsed and inserted {len(created_articles)} articles.",
@@ -96,3 +92,4 @@ async def upload_law_pdf(law_id: int, background_tasks: BackgroundTasks, file: U
         db.rollback()
         logger.error(f"PDF upload failed for law_id={law_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+

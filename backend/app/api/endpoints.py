@@ -15,11 +15,17 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# DI 컨테이너에서 서비스 인스턴스 가져오기
-_services = get_services()
-checker = _services.checker  # main.py에서 lifespan 초기화용으로 export
-check_service = _services.check_service
-template_generator = _services.template_generator
+
+# --- DI 헬퍼 함수 (lazy 로딩) ---
+def _get_check_service():
+    """CheckService 인스턴스를 lazy하게 반환합니다."""
+    return get_services().check_service
+
+
+def _get_template_generator():
+    """DocumentTemplateGenerator 인스턴스를 lazy하게 반환합니다."""
+    return get_services().template_generator
+
 
 @router.get("/")
 def read_root():
@@ -94,6 +100,7 @@ async def check_fact(
     request: CheckRequest,
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
+    check_service=Depends(_get_check_service),
 ):
     # Validate user
     user = db.query(User).filter(User.id == user_id).first()
@@ -184,7 +191,10 @@ def get_popular_claims(db: Session = Depends(get_db)):
     return {"popular_claims": [p.claim_text for p in popular]}
 
 @router.post("/claims/template", response_model=TemplateResponse)
-async def generate_document_template(request: TemplateRequest):
+async def generate_document_template(
+    request: TemplateRequest,
+    template_generator=Depends(_get_template_generator),
+):
     try:
         result = await template_generator.generate_template(request.claim_text, request.explanation)
         return TemplateResponse(
@@ -193,3 +203,4 @@ async def generate_document_template(request: TemplateRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+

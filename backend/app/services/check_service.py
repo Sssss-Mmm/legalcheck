@@ -97,6 +97,17 @@ class CheckService:
         raw_parsed_result = result["result"]
         verdict_str = raw_parsed_result.get("verdict", "ERROR").upper()
 
+        # UNCLEAR (clarification) 응답은 근거 조문이 없으므로 단순 메시지만 저장
+        if verdict_str == "UNCLEAR":
+            ai_msg = ChatMessage(
+                session_id=session_id,
+                role="ai",
+                content=json.dumps(parsed_result, ensure_ascii=False)
+            )
+            db.add(ai_msg)
+            db.commit()
+            return
+
         # ExplanationCache
         revision_ids = [rid for rid in result.get("revision_ids", []) if rid is not None]
         primary_revision_id = int(revision_ids[0]) if revision_ids else None
@@ -197,7 +208,10 @@ class CheckService:
             clarification_result = await self._generate_clarification_question(query, agent_decision, history)
             clarification_result["is_clarification"] = True
             
-            self.save_results(db, session_id, query, clarification_result, {"result": clarification_result})
+            self.save_results(db, session_id, query, clarification_result, {
+                "result": clarification_result,
+                "revision_ids": []
+            })
             
             return {
                 "session_id": session_id,

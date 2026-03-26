@@ -7,17 +7,15 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.documents import Document
-from dotenv import load_dotenv
 
 from app.core.llm import get_mini_llm
 from app.core.config import get_settings
 
-load_dotenv()
 logger = logging.getLogger(__name__)
 
-VECTOR_STORE_PATH = get_settings().VECTOR_STORE_PATH
 
 def ingest_data(file_paths: list[str]):
+    VECTOR_STORE_PATH = get_settings().VECTOR_STORE_PATH
     documents = []
     for path in file_paths:
         if path.endswith(".pdf"):
