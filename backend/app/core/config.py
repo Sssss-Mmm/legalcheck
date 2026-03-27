@@ -27,6 +27,8 @@ class Settings:
 
         # --- Auth ---
         self.ADMIN_API_KEY: str = os.getenv("ADMIN_API_KEY", "")
+        self.JWT_SECRET: str = os.getenv("JWT_SECRET", "super-secret-key-change-in-production")
+        self.JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
 
         # --- CORS ---
         self.CORS_ORIGINS: list[str] = [
@@ -39,6 +41,9 @@ class Settings:
 
         # --- Vector Store ---
         self.VECTOR_STORE_PATH: str = os.getenv("VECTOR_STORE_PATH", "chroma_db")
+
+        # --- Ingestion ---
+        self.PDF_MAX_TEXT_LENGTH: int = int(os.getenv("PDF_MAX_TEXT_LENGTH", "40000"))
 
 
 @lru_cache()

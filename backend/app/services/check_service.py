@@ -6,8 +6,11 @@ HTTP 레이어와 비즈니스 로직의 관심사를 분리합니다.
 import json
 import logging
 from sqlalchemy.orm import Session
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
 
 from app.models import ChatSession, ChatMessage, ClaimCheck, LawArticleRevision, ExplanationCache
+from app.core.llm import get_main_llm
 from app.services.rag_service import LegalFactChecker
 from app.services.hook_service import InputAnalyzer, OutputValidator
 from app.services.agent_service import RoutingAgent
@@ -155,10 +158,6 @@ class CheckService:
         db.commit()
 
     async def _generate_clarification_question(self, query: str, agent_decision: dict, history: list[dict]) -> dict:
-        from langchain_core.prompts import ChatPromptTemplate
-        from langchain_core.output_parsers import JsonOutputParser
-        from app.core.llm import get_main_llm
-        
         system_prompt = """당신은 법률 팩트체커 어시스턴트입니다.
 사용자의 질문에 대답하기 위해 필수적인 정보(근로시간, 상시근로자 수 등)가 누락되어 팩트체크를 진행할 수 없습니다.
 분석된 이유(reasoning)를 바탕으로, 사용자에게 필요한 정보를 자연스럽고 친절하게 되물어보는 질문을 1~2문장으로 작성하세요.

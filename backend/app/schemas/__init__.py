@@ -16,6 +16,7 @@ class UserCreate(UserBase):
 class UserResponse(UserBase):
     id: int
     created_at: datetime
+    token: Optional[str] = None
 
     class Config:
         from_attributes = True

@@ -3,6 +3,17 @@ from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from app.core.database import Base
 
+# 새로 추가된 법률 관련 모델들 (ERD 설계 및 피드백 반영)
+from app.models.law import (
+    Law,
+    LawArticle,
+    LawArticleRevision,
+    Topic,
+    ClaimCheck,
+    ExplanationCache,
+    VerdictEnum
+)
+
 class User(Base):
     __tablename__ = "users"
 
@@ -39,14 +50,3 @@ class ChatMessage(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     session = relationship("ChatSession", back_populates="messages")
-
-# 새로 추가된 법률 관련 모델들 (ERD 설계 및 피드백 반영)
-from app.models.law import (
-    Law,
-    LawArticle,
-    LawArticleRevision,
-    Topic,
-    ClaimCheck,
-    ExplanationCache,
-    VerdictEnum
-)

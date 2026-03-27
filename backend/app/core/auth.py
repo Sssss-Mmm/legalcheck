@@ -1,30 +1,49 @@
 """
 인증/인가 의존성 모듈
-- get_current_user_id: 일반 사용자 API용 (X-User-ID 헤더)
+- get_current_user_id: 일반 사용자 API용 (JWT Bearer Token 검증)
 - verify_admin: 관리자 API용 (X-Admin-Key 헤더)
-
-TODO: 프로덕션 환경에서는 JWT 토큰 기반 인증으로 교체 필요
+- create_access_token: JWT 토큰 생성
 """
 import logging
+import jwt
 
 from fastapi import Header, HTTPException
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-ADMIN_API_KEY = get_settings().ADMIN_API_KEY
+settings = get_settings()
+ADMIN_API_KEY = settings.ADMIN_API_KEY
+JWT_SECRET = settings.JWT_SECRET
+JWT_ALGORITHM = settings.JWT_ALGORITHM
+
+
+def create_access_token(user_id: int) -> str:
+    """JWT 토큰을 생성합니다."""
+    payload = {"sub": str(user_id)}
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
 async def get_current_user_id(
-    x_user_id: int = Header(..., alias="X-User-ID"),
+    authorization: str = Header(..., description="Bearer JWT token"),
 ) -> int:
     """
-    X-User-ID 헤더에서 사용자 ID를 추출합니다.
-    쿼리 파라미터 대신 헤더를 사용하여 URL에 user_id가 노출되지 않도록 합니다.
+    Authorization 헤더(Bearer 토큰)에서 JWT를 검증하고 user_id를 추출합니다.
     """
-    if x_user_id <= 0:
-        raise HTTPException(status_code=400, detail="Invalid user ID")
-    return x_user_id
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid authorization header format")
+    
+    token = authorization.split("Bearer ")[1]
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id_str = payload.get("sub")
+        if user_id_str is None:
+            raise HTTPException(status_code=401, detail="Invalid token payload")
+        return int(user_id_str)
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
 
 async def verify_admin(

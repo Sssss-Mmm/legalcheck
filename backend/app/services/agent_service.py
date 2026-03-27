@@ -34,7 +34,8 @@ class RoutingAgent:
         
         user_message_content = f"앞 단계 분석 결과: {intent_data}"
         if chat_history:
-            user_message_content += f"\n\n이전 대화 맥락(History): {chat_history}"
+            recent_history = chat_history[-5:]
+            user_message_content += f"\n\n이전 대화 맥락(History): {recent_history}"
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),

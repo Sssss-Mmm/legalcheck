@@ -61,6 +61,12 @@ class InputAnalyzer:
             }
 
 class OutputValidator:
+    """
+    Output validation and correction service.
+    Uses get_mini_llm() intentionally because this is a simple text formatting/correction 
+    task, which does not require the heavy reasoning capabilities of get_main_llm().
+    This reduces latency and token footprint.
+    """
     def __init__(self):
         self.llm = get_mini_llm()  # 간단한 교정용이므로 경량 모델 사용
         

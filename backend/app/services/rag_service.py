@@ -118,7 +118,7 @@ class LegalFactChecker:
         
         try:
             parsed_answer = json.loads(answer_response)
-        except Exception:
+        except json.JSONDecodeError:
             parsed_answer = {
                 "verdict": "ERROR",
                 "section_1_summary": str(answer_response),

@@ -60,7 +60,8 @@ class PDFLawParser:
 
         chain = prompt | self.llm | self.parser
         # 안전한 텍스트 크기 제한 (LLM 컨텍스트 보호)
-        text_to_process = text[:40000]
+        from app.core.config import get_settings
+        text_to_process = text[:get_settings().PDF_MAX_TEXT_LENGTH]
         return await chain.ainvoke({"text": text_to_process})
 
     def _save_articles(self, db: Session, law_id: int, articles_data: list[dict]) -> tuple[list[dict], list[dict]]:

@@ -28,6 +28,11 @@ function getUserId(session: any): string | null {
   return session?.user?.id?.toString() ?? null;
 }
 
+/** Extract JWT token from NextAuth session */
+function getUserToken(session: any): string | null {
+  return session?.user?.token ?? null;
+}
+
 export default function Home() {
   const { data: session, status } = useSession();
   const [activeTab, setActiveTab] = useState<"chat" | "search" | "history" | "template">("chat");
@@ -116,10 +121,10 @@ export default function Home() {
   const fetchHistory = async () => {
     if (!session?.user) return;
     try {
-      const userId = getUserId(session);
-      if (!userId) return;
+      const token = getUserToken(session);
+      if (!token) return;
       const res = await fetch(`${API_URL}/sessions`, {
-        headers: { "X-User-ID": userId },
+        headers: { "Authorization": `Bearer ${token}` },
       });
       if (res.ok) {
         const data = await res.json();
@@ -139,10 +144,10 @@ export default function Home() {
   const loadSession = async (sid: number) => {
     if (!session?.user) return;
     try {
-      const userId = getUserId(session);
-      if (!userId) return;
+      const token = getUserToken(session);
+      if (!token) return;
       const res = await fetch(`${API_URL}/sessions/${sid}`, {
-        headers: { "X-User-ID": userId },
+        headers: { "Authorization": `Bearer ${token}` },
       });
       if (res.ok) {
         const data = await res.json();
@@ -158,11 +163,11 @@ export default function Home() {
   const toggleBookmark = async (sid: number) => {
     if (!session?.user) return;
     try {
-      const userId = getUserId(session);
-      if (!userId) return;
+      const token = getUserToken(session);
+      if (!token) return;
       const res = await fetch(`${API_URL}/sessions/${sid}/bookmark`, {
         method: "POST",
-        headers: { "X-User-ID": userId },
+        headers: { "Authorization": `Bearer ${token}` },
       });
       if (res.ok) {
         fetchHistory();
@@ -176,11 +181,11 @@ export default function Home() {
     if (!session?.user) return;
     if (!confirm("정말 이 대화 기록을 삭제하시겠습니까?")) return;
     try {
-      const userId = getUserId(session);
-      if (!userId) return;
+      const token = getUserToken(session);
+      if (!token) return;
       const res = await fetch(`${API_URL}/sessions/${sid}`, {
         method: "DELETE",
-        headers: { "X-User-ID": userId },
+        headers: { "Authorization": `Bearer ${token}` },
       });
       if (res.ok) {
         if (sessionId === sid) {
@@ -295,13 +300,13 @@ export default function Home() {
     setLoading(true);
 
     try {
-      const userId = getUserId(session);
-      if (!userId) return;
+      const token = getUserToken(session);
+      if (!token) return;
       const response = await fetch(`${API_URL}/check`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-User-ID": userId,
+          "Authorization": `Bearer ${token}`,
         },
         body: JSON.stringify({
           query: userQuery,

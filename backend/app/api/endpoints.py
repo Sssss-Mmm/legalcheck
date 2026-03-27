@@ -81,6 +81,7 @@ def search_articles(query: str = Query(..., description="검색할 키워드"), 
 
 @router.post("/auth/login", response_model=UserResponse)
 def login(payload: LoginPayload, db: Session = Depends(get_db)):
+    from app.core.auth import create_access_token
     user = db.query(User).filter(User.email == payload.email).first()
     if not user:
         user = User(
@@ -93,7 +94,10 @@ def login(payload: LoginPayload, db: Session = Depends(get_db)):
         db.add(user)
         db.commit()
         db.refresh(user)
-    return user
+    
+    user_response = UserResponse.model_validate(user)
+    user_response.token = create_access_token(user.id)
+    return user_response
 
 @router.post("/check")
 async def check_fact(

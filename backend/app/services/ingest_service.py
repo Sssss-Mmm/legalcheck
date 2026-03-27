@@ -14,7 +14,9 @@ from app.core.config import get_settings
 logger = logging.getLogger(__name__)
 
 
-def ingest_data(file_paths: list[str]):
+import asyncio
+
+async def ingest_data(file_paths: list[str]):
     VECTOR_STORE_PATH = get_settings().VECTOR_STORE_PATH
     documents = []
     for path in file_paths:
@@ -42,7 +44,7 @@ def ingest_data(file_paths: list[str]):
         try:
             original_text = split.page_content
             # Generate summary
-            summary = chain.invoke({"text": original_text})
+            summary = await chain.ainvoke({"text": original_text})
             
             # Create a new document with summary as page_content and original text in metadata
             new_metadata = split.metadata.copy()
@@ -68,7 +70,6 @@ def ingest_data(file_paths: list[str]):
 
 if __name__ == "__main__":
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir))) 
     # __file__ is backend/app/services/ingest_service.py
     # dir: backend/app/services
     # parent: backend/app
@@ -88,6 +89,6 @@ if __name__ == "__main__":
     
     if pdf_files:
         print(f"Found {len(pdf_files)} PDF files: {pdf_files}")
-        ingest_data(pdf_files)
+        asyncio.run(ingest_data(pdf_files))
     else:
         print("No PDF files found in data directory.")

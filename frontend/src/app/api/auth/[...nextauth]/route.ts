@@ -46,6 +46,7 @@ export const authOptions: NextAuthOptions = {
                 const data = await res.json();
                 if (session.user) {
                     (session.user as any).id = data.id;
+                    (session.user as any).token = data.token;
                 }
             } catch (e) {
                 console.error(e);
