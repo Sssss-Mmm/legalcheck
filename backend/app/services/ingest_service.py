@@ -78,7 +78,7 @@ if __name__ == "__main__":
     data_dir = os.path.join(project_root, "data")
     
     if not os.path.exists(data_dir):
-        print(f"Data directory not found: {data_dir}")
+        logger.error(f"Data directory not found: {data_dir}")
         exit(1)
         
     pdf_files = [
@@ -88,7 +88,7 @@ if __name__ == "__main__":
     ]
     
     if pdf_files:
-        print(f"Found {len(pdf_files)} PDF files: {pdf_files}")
+        logger.info(f"Found {len(pdf_files)} PDF files: {pdf_files}")
         asyncio.run(ingest_data(pdf_files))
     else:
-        print("No PDF files found in data directory.")
+        logger.info("No PDF files found in data directory.")
