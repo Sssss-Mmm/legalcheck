@@ -9,11 +9,28 @@ class TemplateOutput(BaseModel):
     document_content: str = Field(description="마크다운 형식으로 작성된 문서 초안")
 
 class DocumentTemplateGenerator:
+    """
+    팩트체크 결과를 바탕으로 사용자에게 필요한 법적 문서(진정서, 내용증명 등)의 초안을 자동 생성하는 서비스입니다.
+    """
     def __init__(self):
+        """
+        DocumentTemplateGenerator 생성자.
+        문서 작성을 위해 창의성을 통제(temperature=0.2)한 경량형(Mini) LLM과 JSON 출력 파서를 초기화합니다.
+        """
         self.llm = get_mini_llm(temperature=0.2)
         self.parser = JsonOutputParser(pydantic_object=TemplateOutput)
         
     async def generate_template(self, claim_text: str, explanation: str) -> dict:
+        """
+        사용자의 주장과 AI의 팩트체크 결과를 조합하여 가장 적합한 법적 조치 문서 양식의 마크다운 초안을 생성합니다.
+
+        Args:
+            claim_text (str): 사용자의 원본 주장 텍스트
+            explanation (str): AI가 도출한 팩트체크 결과 요약 및 법적 근거 설명
+
+        Returns:
+            dict: 생성된 문서의 제목(document_title)과 마크다운 텍스트(document_content)가 포함된 딕셔너리
+        """
         prompt = PromptTemplate(
             template="""당신은 대한민국 노동법 전문 노무사입니다. 사용자의 주장과 이에 대한 AI의 법률 팩트체크결과를 바탕으로, 
 사용자가 취할 수 있는 현실적이고 가장 적절한 법적 조치(예: 고용노동부 진정서, 지방노동위원회 구제신청서, 사업주 대상 내용증명 우편 등) 하나를 선택하여 문서 초안을 작성해주세요.

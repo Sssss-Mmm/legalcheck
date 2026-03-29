@@ -17,6 +17,14 @@ logger = logging.getLogger(__name__)
 import asyncio
 
 async def ingest_data(file_paths: list[str]):
+    """
+    제공된 PDF 및 텍스트 문서를 수집(Ingest)하여 메인 벡터 데이터베이스에 저장하는 파이프라인 함수입니다.
+    문서를 파싱하고 일정한 크기의 청크(Chunk)로 나눈 후, 성능 향상을 위해 각 청크별 세부 요약본(Summary)을 생성하여
+    로컬 ChromaDB에 임베딩 데이터와 함께 영구 저장합니다.
+
+    Args:
+        file_paths (list[str]): 수집 대상이 되는 로컬 PDF 또는 순수 텍스트 문서들의 파일 절대 경로 리스트
+    """
     VECTOR_STORE_PATH = get_settings().VECTOR_STORE_PATH
     documents = []
     for path in file_paths:

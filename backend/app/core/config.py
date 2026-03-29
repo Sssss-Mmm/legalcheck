@@ -15,6 +15,10 @@ class Settings:
     """
 
     def __init__(self):
+        """
+        Settings 인스턴스를 초기화하며, os.getenv를 통해 시스템 환경변수들을 즉시 로드합니다.
+        LLM 키, 데이터베이스 URI, JWT 비밀키 등 핵심 애플리케이션 설정값을 클래스 속성으로 바인딩합니다.
+        """
         # --- OpenAI / LLM ---
         self.OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
         self.MAIN_LLM_MODEL: str = os.getenv("MAIN_LLM_MODEL", "gpt-4o")
@@ -48,4 +52,11 @@ class Settings:
 
 @lru_cache()
 def get_settings() -> Settings:
+    """
+    모든 모듈에서 공유할 Settings 싱글톤 객체를 반환합니다.
+    lru_cache 데코레이터 덕분에 캐시가 활용되어, 여러 번 호출해도 환경변수를 매번 재조회하지 않고 동일한 인스턴스를 반환합니다.
+
+    Returns:
+        Settings: 애플리케이션의 전역 설정값을 담은 인스턴스
+    """
     return Settings()

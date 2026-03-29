@@ -26,7 +26,16 @@ class FactCheckResult(BaseModel):
     section_6_suggested_followups: list[str] = Field(description="6️⃣ 추천 후속 질문 3가지 (사용자의 현재 상황에서 궁금해할 만한 이어지는 질문)")
 
 class LegalFactChecker:
+    """
+    RAG(Retrieval-Augmented Generation) 기반의 핵심 팩트체크 클래스.
+    벡터 DB를 조회해 관련 법령을 찾고 LLM을 통해 FactCheckResult를 도출합니다.
+    """
     def __init__(self):
+        """
+        LegalFactChecker의 생성자입니다.
+        벡터 스토어 경로, 임베딩 모델(OpenAI), 주 판단용(Main) LLM, JSON 출력 파서,
+        그리고 검색된 문서 문맥을 압축/요약하기 위한 ContextCompressor를 초기화합니다.
+        """
         settings = get_settings()
         self.embeddings = OpenAIEmbeddings()
         self.vector_store_path = settings.VECTOR_STORE_PATH
@@ -36,12 +45,23 @@ class LegalFactChecker:
         self.compressor = ContextCompressor()
 
     def initialize_vector_store(self):
+        """
+        설정된 경로(VECTOR_STORE_PATH)에 존재하는 로컬 Chroma 오픈소스 벡터 DB를 
+        동기적으로 로드하여 팩트체크 검색(Retriever)에 사용할 준비를 마칩니다.
+        """
         self.vector_store = Chroma(
             persist_directory=self.vector_store_path,
             embedding_function=self.embeddings
         )
 
     async def add_revisions(self, revisions_data: list[dict]):
+        """
+        DB에 저장된 법령 개정안이나 조문(LawArticleRevision) 데이터를
+        문서 변환을 거쳐 벡터 스토어에 삽입(Add) 및 임베딩 처리합니다.
+
+        Args:
+            revisions_data (list[dict]): 추가 또는 갱신할 법령/조문 메타데이터 및 텍스트 콘텐츠 리스트
+        """
         if not self.vector_store:
             self.initialize_vector_store()
             
@@ -61,6 +81,18 @@ class LegalFactChecker:
             self.vector_store.add_documents(docs)
 
     async def check_fact_with_history(self, query: str, chat_history: list, plugin_context: str = ""):
+        """
+        이전 채팅 내역과 부가적인 플러그인 문맥을 참고하여 벡터 DB에서 관련된 법령/판례를 조회하고,
+        LLM을 통해 구조화된 형태(FactCheckResult)로 팩트체크 및 검증 결과를 최종 도출합니다.
+
+        Args:
+            query (str): 팩트체크 대상이 되는 사용자 질문 또는 보완된 검색 쿼리
+            chat_history (list): 사용자와의 이전 대화 내역 (Human/AI 역할 모델 컨버팅 포함)
+            plugin_context (str, optional): Agent나 Vision 판단 등 외부 플러그인에서 생성되어 검색 정확도를 높여주는 추가 문맥(텍스트). Defaults to "".
+
+        Returns:
+            dict: AI가 판정한 팩트체크 포맷 결과(result), 참고 조문 출처들의 리스트(sources), 참고 법 조항 메타데이터(revision_ids) 요소
+        """
         if not self.vector_store:
             self.initialize_vector_store()
             

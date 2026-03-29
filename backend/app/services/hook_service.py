@@ -17,11 +17,28 @@ class IntentResult(BaseModel):
     is_counseling_request: bool = Field(description="단순 정보 요청이 아닌, 구체적인 상황에 대한 법률 상담 요청인지 여부")
 
 class InputAnalyzer:
+    """
+    사용자의 원본 텍스트 입력을 분석하여 핵심 의도, 법률 영역, 키워드 등을 추출하는 입력단(Hook) 서빙 클래스입니다.
+    """
     def __init__(self):
+        """
+        InputAnalyzer의 생성자입니다.
+        주요(Main) LLM 모델을 초기화하고, IntentResult 포맷을 위한 JSON 파서를 설정합니다.
+        """
         self.llm = get_main_llm()
         self.parser = JsonOutputParser(pydantic_object=IntentResult)
 
     async def analyze_query(self, query: str) -> dict:
+        """
+        주어진 사용자 질문(query)을 분석하여 핵심 의도 및 키워드를 JSON 형태로 추출합니다.
+
+        Args:
+            query (str): 사용자의 원본 텍스트 (질문, 하소연 등)
+
+        Returns:
+            dict: 추출된 의도(intent), 적용 법 영역(law_domain), 키워드 리스트(keywords),
+                  법률 질문 여부(is_legal_question), 상담 요청 여부(is_counseling_request) 정보
+        """
         system_prompt = """당신은 법률 팩트체커 시스템의 '첫 번째 단계(Input Hook)'를 담당하는 분석기입니다.
 사용자의 입력(질문, 주장, 하소연 등)을 받아서 아래의 규칙에 따라 철저히 분석하고 구조화된 데이터를 반환해야 합니다.
 
@@ -66,15 +83,25 @@ class OutputValidator:
     Uses get_mini_llm() intentionally because this is a simple text formatting/correction 
     task, which does not require the heavy reasoning capabilities of get_main_llm().
     This reduces latency and token footprint.
+    AI가 생성한 초안의 단정적 표현, 감정적 위로, 잘못된 법률 용어 등을 검증 및 교정하는 역할을 수행합니다.
     """
     def __init__(self):
+        """
+        OutputValidator의 생성자입니다.
+        출력 검증 및 교정 목적으로 비용 효율이 좋은 경량(Mini) LLM 트리를 초기화합니다.
+        """
         self.llm = get_mini_llm()  # 간단한 교정용이므로 경량 모델 사용
         
     async def validate_and_correct(self, result: dict) -> dict:
         """
-        AI가 생성한 답변(FactCheckResult 형태)을 검사하여
-        단정적 표현(100% 이긴다), 감정적 위로, 잘못된 법률 용어 직역이 있는지 확인 후
-        문제가 있으면 안전하고 중립적인 언어로 "교정"하여 반환합니다.
+        AI가 생성한 답변 초안 내부를 검사하여 단정적 표현(100% 이긴다), 감정적 위로,
+        잘못된 법률 용어 직역이 있는지 확인 후, 보다 안전하고 중립적인 언어로 교정하여 반환합니다.
+
+        Args:
+            result (dict): 각 에이전트 스텝을 거쳐 생성된 최종 팩트체크 초안
+
+        Returns:
+            dict: 교정 규칙이 적용되어 중화된 최종 JSON 응답 데이터
         """
         
         system_prompt = """당신은 법률 팩트체커 시스템의 '최종 출력 검증기(Output Hook)'입니다.

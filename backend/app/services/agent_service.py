@@ -5,6 +5,9 @@ from app.services.hook_service import IntentResult
 from app.core.llm import get_main_llm
 
 class AgentAction(BaseModel):
+    """
+    사용자의 질문 의도와 키워드 정보를 바탕으로, 이 질문에 대답하기 위해 어떤 외부 도구/플러그인이 필요한지 결정하는 에이전트
+    """
     requires_law_db_search: bool = Field(description="관련 법 조문을 데이터베이스에서 찾아보아야 하는가?")
     requires_precedent_search: bool = Field(description="과거의 유사한 사례나 실제 판례(법원 판결)를 찾아보아야 하는가?")
     requires_calculator: bool = Field(description="해고예고수당, 퇴직금, 주휴수당, 연차수당 등 특정 금전적 계산이 필요한가?")
@@ -12,11 +15,30 @@ class AgentAction(BaseModel):
     reasoning: str = Field(description="위 도구들의 사용 필요성 여부를 결정한 논리적인 이유")
 
 class RoutingAgent:
+    """
+    사용자의 질문에 답변하기 위해 어떤 외부 도구/플러그인(법령 검색, 판례 검색, 계산기 등)이
+    필요한지 판단하고 라우팅을 결정하는 에이전트 클래스입니다.
+    """
     def __init__(self):
+        """
+        RoutingAgent의 생성자입니다.
+        주요 LLM 모델과 AgentAction 스키마에 기반한 JSON 파서를 초기화합니다.
+        """
         self.llm = get_main_llm()
         self.parser = JsonOutputParser(pydantic_object=AgentAction)
 
     async def decide_action(self, intent_data: dict, chat_history: list[dict] = None) -> dict:
+        """
+        이전 단계에서 분석된 사용자의 질문 의도(intent_data)와 대화 내역(chat_history)을 바탕으로,
+        필요한 도구(law_db_search, precedent_search, calculator, clarification)의 사용 여부를 판단하여 반환합니다.
+
+        Args:
+            intent_data (dict): 이전 Input Hook 단계에서 추출된 사용자 의도 및 키워드 정보
+            chat_history (list[dict], optional): 이전 대화 내역. Defaults to None.
+
+        Returns:
+            dict: 각 도구 사용 여부(bool)와 그에 대한 판단 이유(reasoning)가 포함된 딕셔너리
+        """
         system_prompt = """당신은 법률 팩트체커 시스템의 '두 번째 단계(Agent)'를 담당하는 판단 엔진입니다.
 앞 단계(Input Hook)에서 분석된 사용자의 질문 의도와 키워드 정보를 바탕으로, 이 질문에 대답하기 위해 어떤 외부 도구/플러그인이 필요한지 결정해야 합니다.
 

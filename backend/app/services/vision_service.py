@@ -6,13 +6,26 @@ from app.core.llm import get_main_llm
 logger = logging.getLogger(__name__)
 
 class VisionAnalyzer:
+    """
+    사용자가 업로드한 이미지를 분석하여 텍스트 및 법률적 맥락 정보를 추출하는 비전(Vision) 기반 분석 서비스.
+    """
     def __init__(self):
+        """
+        VisionAnalyzer 생성자.
+        이미지 문서 분석과 긴 분량의 텍스트 판독을 지원하기 위해 출력 토큰 한도(max_tokens=1000)가 늘어난 주(Main) LLM을 초기화합니다.
+        """
         self.llm = get_main_llm(max_tokens=1000)
 
     async def extract_text_from_image(self, base64_image: str) -> str:
         """
-        Base64 인코딩된 이미지를 받아서 GPT-4o 머신비전으로 텍스트를 읽고,
-        그 문서가 무엇인지, 주요 팩트(임금, 기간, 독소조항 등)가 무엇인지 법률적 맥락에서 요약합니다.
+        Base64 인코딩된 이미지 데이터를 받아서 머신비전 AI 모델로 판독하고,
+        해당 문서의 종류와 법률적 팩트(임금, 기간, 독소조항 등)를 추출 및 요약하여 반환합니다.
+
+        Args:
+            base64_image (str): 사용자(클라이언트)가 첨부한 원본 이미지의 Base64 인코딩 문자열
+
+        Returns:
+            str: 비전 AI가 판독하여 법률적 관점으로 건조하게 요약해 낸 Markdown 결과 텍스트 반환
         """
         
         # Make sure the base64 string doesn't have the data URL prefix if passed incorrectly

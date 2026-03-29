@@ -32,6 +32,10 @@ class CheckService:
         validator: OutputValidator,
         vision: VisionAnalyzer,
     ):
+        """
+        CheckService 초기화 메서드.
+        팩트체크 파이프라인의 각 단계에서 사용되는 서비스 객체들을 의존성 주입받습니다.
+        """
         self.checker = checker
         self.analyzer = analyzer
         self.agent = agent
@@ -39,7 +43,18 @@ class CheckService:
         self.vision = vision
 
     def get_or_create_session(self, db: Session, user_id: int, session_id: int | None, query: str) -> tuple[int, ChatSession]:
-        """세션을 가져오거나 새로 생성합니다."""
+        """
+        사용자의 채팅 세션을 조회하거나, 세션이 없을 경우 새로 생성하여 반환합니다.
+
+        Args:
+            db (Session): 데이터베이스 세션
+            user_id (int): 사용자 ID
+            session_id (int | None): 기존 세션 ID (없으면 None)
+            query (str): 채팅 세션의 제목으로 사용될 사용자 쿼리 질문
+
+        Returns:
+            tuple[int, ChatSession]: 생성 또는 조회된 세션 ID와 ChatSession 객체
+        """
         if not session_id:
             chat_session = ChatSession(user_id=user_id, title=query[:50])
             db.add(chat_session)
@@ -51,14 +66,35 @@ class CheckService:
             return session_id, chat_session
 
     def load_chat_history(self, db: Session, session_id: int) -> list[dict]:
-        """채팅 히스토리를 로드합니다."""
+        """
+        특정 세션 ID의 과거 채팅 내역을 조회하여 LLM이 처리하기 쉬운 딕셔너리 포맷 리스트로 반환합니다.
+
+        Args:
+            db (Session): 데이터베이스 세션
+            session_id (int): 조회할 채팅 세션 ID
+
+        Returns:
+            list[dict]: "role" (user/ai)과 "content" 정보를 포함한 채팅 메시지 리스트
+        """
         messages = db.query(ChatMessage).filter(
             ChatMessage.session_id == session_id
         ).order_by(ChatMessage.created_at).all()
         return [{"role": msg.role, "content": msg.content} for msg in messages]
 
     async def build_plugin_context(self, query: str, intent_analysis: dict, agent_decision: dict, image_data: str | None = None) -> tuple[str, str]:
-        """플러그인 컨텍스트와 확장된 검색 쿼리를 빌드합니다."""
+        """
+        비전 API 분석, 사전 키워드 추출, 판례 검색 메타데이터, 계산기 공식 등 외부 플러그인의 결과물을 조합하여 
+        LLM 판단의 정확도를 높이는 추가 문맥(Context)과 RAG 검색용 쿼리를 생성합니다.
+
+        Args:
+            query (str): 사용자의 원본 질문
+            intent_analysis (dict): Input Hook에서 추출된 의도 분석 결과
+            agent_decision (dict): Agent 단계에서 판단한 도구 사용 여부 및 목적
+            image_data (str | None, optional): 참조 이미지 데이터 (Base64). Defaults to None.
+
+        Returns:
+            tuple[str, str]: 확장된 참고 문맥(plugin_context) 문자열 및 RAG 검색에 활용할 최종 질의어(search_query) 문자열
+        """
         plugin_context = ""
         search_query = query
 
@@ -96,7 +132,17 @@ class CheckService:
         parsed_result: dict,
         result: dict,
     ) -> None:
-        """팩트체크 결과를 DB에 저장합니다."""
+        """
+        전체 파이프라인의 결과물인 팩트체크 분석 내용을 데이터베이스에 기록하고,
+        사용자와 AI 간의 채팅 메시지로 저장합니다.
+
+        Args:
+            db (Session): 데이터베이스 세션
+            session_id (int): 현재 처리 중인 채팅 세션 ID
+            query (str): 팩트체크 대상이 되는 사용자의 질문 (클레임)
+            parsed_result (dict): Output Validator를 거쳐 교정된 최종 AI 답변 초안 딕셔너리
+            result (dict): RAG 모듈 등 내부 처리 과정의 메타데이터(revision_ids 등)가 포함된 원형 데이터
+        """
         raw_parsed_result = result["result"]
         verdict_str = raw_parsed_result.get("verdict", "ERROR").upper()
 
@@ -158,6 +204,18 @@ class CheckService:
         db.commit()
 
     async def _generate_clarification_question(self, query: str, agent_decision: dict, history: list[dict]) -> dict:
+        """
+        사용자의 질문에 핵심적인 정보가 누락되어 검증을 진행할 수 없을 때, 이를 역으로 다시 물어보는
+        질문 텍스트(Clarification Question)를 생성하여 반환합니다.
+        
+        Args:
+            query (str): 정보가 누락된 사용자 질문
+            agent_decision (dict): 추가 확인이 필요하다고 판단한 AI의 논리적 이유(reasoning)가 담긴 딕셔너리
+            history (list[dict]): 사용자와의 이전 대화 내역
+
+        Returns:
+            dict: 팩트체크 결과 형식(verdict='UNCLEAR')으로 구성된 역질문 답변 딕셔너리
+        """
         system_prompt = """당신은 법률 팩트체커 어시스턴트입니다.
 사용자의 질문에 대답하기 위해 필수적인 정보(근로시간, 상시근로자 수 등)가 누락되어 팩트체크를 진행할 수 없습니다.
 분석된 이유(reasoning)를 바탕으로, 사용자에게 필요한 정보를 자연스럽고 친절하게 되물어보는 질문을 1~2문장으로 작성하세요.
@@ -188,7 +246,20 @@ class CheckService:
             }
 
     async def execute(self, db: Session, user_id: int, query: str, session_id: int | None = None, image_data: str | None = None) -> dict:
-        """전체 팩트체크 파이프라인을 실행합니다."""
+        """
+        단일 사용자의 팩트체크 요청을 처리하는 전체 파이프라인 로직을 관장하고 실행합니다.
+        세션 생성, Intent 분석(Hook), 플러그인 도구 결정(Agent), RAG 검색 및 판정, 답변 교정(Output Hook), DB 기록 단계로 구성됩니다.
+
+        Args:
+            db (Session): 데이터베이스 세션
+            user_id (int): 팩트체크를 요청한 사용자의 식별 ID
+            query (str): 팩트체크 대상이 되는 질문 또는 주장문
+            session_id (int | None, optional): 기존 채팅방의 세션 ID. 생성 시엔 None. Defaults to None.
+            image_data (str | None, optional): 첨부된 이미지 데이터(Base64 문자열). Defaults to None.
+
+        Returns:
+            dict: 세션 ID, 최종 판정 결과, 참고 자료 출처 및 AI 파이프라인 로깅 데이터
+        """
         # 1. 세션 관리
         session_id, chat_session = self.get_or_create_session(db, user_id, session_id, query)
 
