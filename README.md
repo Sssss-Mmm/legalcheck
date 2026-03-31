@@ -43,12 +43,12 @@
 
 ```mermaid
 graph TD
-    User(["👨‍💻 사용자"]) -->|1. 팩트체크 요청 (+이미지, 판례 검색)| Frontend["Next.js Frontend"]
-    User -->|2. 법률 문서 초안 생성 요청| Frontend
-    Frontend -->|OAuth 인증| NextAuth["NextAuth.js"]
-    Frontend -- REST API --> Backend["FastAPI Backend"]
+    User(["👨‍💻 사용자"]) -->|"1. 팩트체크 요청 (+이미지, 판례 검색)"| Frontend["Next.js Frontend"]
+    User -->|"2. 법률 문서 초안 생성 요청"| Frontend
+    Frontend -->|"OAuth 인증"| NextAuth["NextAuth.js"]
+    Frontend -- "REST API" --> Backend["FastAPI Backend"]
 
-    Admin(["👮 관리자"]) -->|법령 PDF 업로드| Backend
+    Admin(["👮 관리자"]) -->|"법령 PDF 업로드"| Backend
 
     subgraph Backend Services
         Backend --> Vision["👁️ Vision Service"]
@@ -58,15 +58,15 @@ graph TD
         Backend --> DataParsing["📄 파싱 엔진"]
     end
 
-    Vision -->|이미지 분석| LLM
-    RAG <-->|유사도 문서 검색| VectorDB[("ChromaDB")]
-    Agent -->|검증 및 생성| LLM["OpenAI API"]
-    Template -->|문서 초안 생성| LLM
+    Vision -->|"이미지 분석"| LLM
+    RAG <-->|"유사도 문서 검색"| VectorDB[("ChromaDB")]
+    Agent -->|"검증 및 생성"| LLM["OpenAI API"]
+    Template -->|"문서 초안 생성"| LLM
     
-    DataParsing -->|법조문 구조화/단편화| DB[("PostgreSQL Database")]
-    DataParsing -->|임베딩 저장| VectorDB
+    DataParsing -->|"법조문 구조화/단편화"| DB[("PostgreSQL Database")]
+    DataParsing -->|"임베딩 저장"| VectorDB
 
-    Backend <-->|CRUD 및 캐싱| DB
+    Backend <-->|"CRUD 및 캐싱"| DB
 ```
 
 ---
