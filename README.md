@@ -136,6 +136,5 @@ npm run dev
 ---
 
 ## 🤝 기여자 및 연락처 (Contact & License)
-- **Maintainer**: 홍길동 ([email@example.com](mailto:email@example.com))
-- 이 프로젝트는 [본인 깃허브 주소 링크](#)에서 지속적으로 개선 중입니다.
-- 이 저장소는 라이선스 정책의 적용을 받습니다. (License: [MIT License](LICENSE))
+- **Maintainer**: 이승민 ([elation1111@naver.com](mailto:elation1111@naver.com))
+- 이 프로젝트는 [본인 깃허브 주소 링크](https://github.com/Sssss-Mmm/legalcheck)에서 지속적으로 개선 중입니다.
