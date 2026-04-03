@@ -54,6 +54,10 @@ export default function Home() {
   const [generatedTemplate, setGeneratedTemplate] = useState<{ title: string; content: string } | null>(null);
   const [isGeneratingTabTemplate, setIsGeneratingTabTemplate] = useState(false);
 
+  /**
+   * 템플릿 작성 탭에서 입력받은 내용을 바탕으로 법적 문서 초안을 생성합니다.
+   * 백엔드 `/claims/template` API를 호출하고 생성된 제목 및 내용을 상태에 저장합니다.
+   */
   const handleGenerateTabTemplate = async () => {
     if (!templateInput.trim()) return;
     setIsGeneratingTabTemplate(true);
@@ -80,6 +84,10 @@ export default function Home() {
     }
   };
 
+  /**
+   * 이미지 파일 업로드 입력(input) 변경 시 호출되는 이벤트 핸들러입니다.
+   * 선택된 이미지의 용량을 검사(5MB 제한)하고, Base64 문자열로 변환하여 상태(selectedImage)에 저장합니다.
+   */
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -100,6 +108,9 @@ export default function Home() {
     fetchPopularClaims();
   }, []);
 
+  /**
+   * 실시간 인기 팩트체크 검색어 목록을 백엔드로부터 가져와 상태에 저장합니다.
+   */
   const fetchPopularClaims = async () => {
     try {
       const res = await fetch(`${API_URL}/claims/popular`);
@@ -112,12 +123,18 @@ export default function Home() {
     }
   };
 
+  /**
+   * 현재 상태를 초기화하여 새로운 채팅(팩트체크 대화) 세션을 시작합니다.
+   */
   const startNewChat = () => {
     setSessionId(null);
     setChatHistory([]);
     setActiveTab("chat");
   };
 
+  /**
+   * 로그인한 사용자의 과거 팩트체크 대화 세션 목록을 백엔드 API에서 조회하여 상태에 저장합니다.
+   */
   const fetchHistory = async () => {
     if (!session?.user) return;
     try {
@@ -141,6 +158,10 @@ export default function Home() {
     }
   }, [session]);
 
+  /**
+   * 이전 대화 기록 중 하나를 선택했을 때 관련된 메시지 세션을 불러옵니다.
+   * @param {number} sid - 불러올 세션의 고유 ID
+   */
   const loadSession = async (sid: number) => {
     if (!session?.user) return;
     try {
@@ -160,6 +181,10 @@ export default function Home() {
     }
   };
 
+  /**
+   * 특정 세션에 북마크를 설정하거나 해제합니다.
+   * @param {number} sid - 북마크 상태를 변경할 대상 세션 ID
+   */
   const toggleBookmark = async (sid: number) => {
     if (!session?.user) return;
     try {
@@ -177,6 +202,10 @@ export default function Home() {
     }
   };
 
+  /**
+   * 특정 채팅 세션(대화 기록)을 삭제하고, 현재 열려있는 세션인 경우 상태를 초기화합니다.
+   * @param {number} sid - 삭제할 세션의 ID
+   */
   const deleteSession = async (sid: number) => {
     if (!session?.user) return;
     if (!confirm("정말 이 대화 기록을 삭제하시겠습니까?")) return;
@@ -198,6 +227,10 @@ export default function Home() {
     }
   };
 
+  /**
+   * 팩트체크 요약 결과 및 조언 등을 클립보드에 복사하여 다른 앱으로 쉽게 공유할 수 있도록 돕습니다.
+   * @param {ChatMessage} msg - 복사할 결과가 담긴 AI 메시지 객체
+   */
   const handleShare = (msg: ChatMessage) => {
     const textToShare = `[법률 팩트체크]\n\n요약: ${msg.section_1_summary || '요약 없음'}\n\n판정: ${msg.verdict || '확인불가'}\n${msg.section_2_law_explanation || ''}\n${msg.section_3_real_case_example || ''}\n${msg.section_4_caution || ''}`;
     navigator.clipboard.writeText(textToShare).then(() => {
@@ -205,12 +238,21 @@ export default function Home() {
     });
   };
 
+  /**
+   * 응답으로 생성된 문서 초안의 본문을 클립보드에 복사합니다.
+   * @param {string} content - 문서 초안 본문
+   */
   const handleCopyTemplate = (content: string) => {
     navigator.clipboard.writeText(content).then(() => {
       alert("문서 초안이 클립보드에 복사되었습니다!");
     });
   };
 
+  /**
+   * 채팅 대화 흐름 기반으로 실질적 대응 조치를 위한 법적 문서(진정서, 내용증명 등) 초안을 자동 생성합니다.
+   * @param {number} idx - 문서 생성을 요청한 AI 응답 메시지의 인덱스 (기록 업데이트 시 사용)
+   * @param {ChatMessage} msg - 문서 생성 참조로 사용될 AI 응답 메시지 데이터
+   */
   const generateTemplate = async (idx: number, msg: ChatMessage) => {
     if (!msg.section_1_summary) return;
     setGeneratingTemplate(prev => ({ ...prev, [idx]: true }));
@@ -251,6 +293,10 @@ export default function Home() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
+  /**
+   * 입력된 검색 키워드를 기반으로 연관된 법 조문을 검색합니다.
+   * 법령 검색 탭에서 동작하며 백엔드 검색 API를 호출합니다.
+   */
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery) return;
@@ -266,12 +312,19 @@ export default function Home() {
     }
   };
 
+  /**
+   * 자동 혹은 사용자 강제 요청에 의해 스크롤을 대화 영역 가장 밑단으로 이동시킵니다.
+   * @param {boolean} force - 스크롤 위치에 무관하게 항상 바닥으로 스크롤할지 여부
+   */
   const scrollToBottom = (force = false) => {
     if (force || isAtBottom.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   };
 
+  /**
+   * 대화 영역 내에서 스크롤 이벤트를 감지하여 사용자가 제일 밑에 있는지(isAtBottom) 여부를 갱신합니다.
+   */
   const handleChatScroll = () => {
     const el = chatContainerRef.current;
     if (!el) return;
@@ -286,6 +339,11 @@ export default function Home() {
     }
   }, [chatHistory]);
 
+  /**
+   * 사용자가 입력한 법률/팩트체크 관련 문구와 선택적 이미지를 서버(LLM 에이전트)에 전송하고, AI 응답 결과를 채팅 내역에 업데이트합니다.
+   * @param {string} text - 사용자가 입력한 텍스트 쿼리
+   * @param {string | null} imageToUpload - (선택 사항) 사용자가 업로드한 Base64 인코딩 이미지
+   */
   const submitQuery = async (text: string, imageToUpload: string | null = null) => {
     if (!text || !session?.user) return;
 
@@ -354,6 +412,9 @@ export default function Home() {
     }
   };
 
+  /**
+   * 폼이 제출되었을 때 submitQuery 함수를 호출하기 위한 래퍼(Wrapper) 핸들러
+   */
   const handleCheck = async (e: React.FormEvent) => {
     e.preventDefault();
     submitQuery(query, selectedImage);
@@ -363,7 +424,10 @@ export default function Home() {
     return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Loading...</div>;
   }
 
-  // Helper for rendering verdict badges
+  /**
+   * AI의 팩트체크 판정 결과(verdict)에 따라 각기 다른 디자인의 배지(badge) 프리젠테이셔널 컴포넌트를 반환합니다.
+   * @param {string} verdict - 'TRUE', 'PARTIAL', 'FALSE', 또는 undefined
+   */
   const getVerdictBadge = (verdict?: string) => {
     switch (verdict) {
       case "TRUE":

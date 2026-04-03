@@ -29,6 +29,7 @@ def _get_template_generator():
 
 @router.get("/")
 def read_root():
+    """서버 헬스 체크용 기본 엔드포인트입니다."""
     return {"status": "ok", "message": "Legal Fact Checker API is running"}
 
 @router.get("/search/articles")
@@ -81,6 +82,10 @@ def search_articles(query: str = Query(..., description="검색할 키워드"), 
 
 @router.post("/auth/login", response_model=UserResponse)
 def login(payload: LoginPayload, db: Session = Depends(get_db)):
+    """
+    구글 로그인을 처리하고 JWT 엑세스 토큰을 발급합니다.
+    최초 로그인 시 DB에 회원 정보를 저장하고, 이후에는 기존 정보를 바탕으로 로그인합니다.
+    """
     from app.core.auth import create_access_token
     user = db.query(User).filter(User.email == payload.email).first()
     if not user:
@@ -128,6 +133,9 @@ async def check_fact(
 
 @router.get("/sessions")
 def get_user_sessions(user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    """
+    현재 인증된 사용자의 이전 팩트체크 대화(세션) 목록을 최근 수정일 순으로 조회합니다.
+    """
     sessions = db.query(ChatSession).filter(ChatSession.user_id == user_id).order_by(desc(ChatSession.updated_at)).all()
     return {
         "sessions": [
@@ -142,6 +150,10 @@ def get_user_sessions(user_id: int = Depends(get_current_user_id), db: Session =
 
 @router.get("/sessions/{session_id}")
 def get_session_details(session_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    """
+    특정 팩트체크 세션(id)의 전체 대화 내역(메시지 리스트)과 세션 상세 정보를 조회합니다.
+    본인의 세션에만 접근할 수 있습니다.
+    """
     session = db.query(ChatSession).filter(ChatSession.id == session_id, ChatSession.user_id == user_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -168,6 +180,9 @@ def get_session_details(session_id: int, user_id: int = Depends(get_current_user
 
 @router.post("/sessions/{session_id}/bookmark")
 def toggle_bookmark(session_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    """
+    특정 대화 세션에 북마크 표시를 하거나 해제(토글)합니다.
+    """
     session = db.query(ChatSession).filter(ChatSession.id == session_id, ChatSession.user_id == user_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -178,6 +193,9 @@ def toggle_bookmark(session_id: int, user_id: int = Depends(get_current_user_id)
 
 @router.delete("/sessions/{session_id}")
 def delete_session(session_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    """
+    특정 대화 세션을 삭제합니다. DB에서 세션 및 관련된 메시지가 모두 제거됩니다.
+    """
     session = db.query(ChatSession).filter(ChatSession.id == session_id, ChatSession.user_id == user_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -188,6 +206,9 @@ def delete_session(session_id: int, user_id: int = Depends(get_current_user_id),
 
 @router.get("/claims/popular")
 def get_popular_claims(db: Session = Depends(get_db)):
+    """
+    전체 시스템에서 가장 많이 검색된 인기 팩트체크 키워드/질문 상위 5개를 반환합니다.
+    """
     popular = db.query(ClaimCheck.claim_text, func.count(ClaimCheck.id).label('count'))\
                 .group_by(ClaimCheck.claim_text)\
                 .order_by(desc(func.count(ClaimCheck.id)))\
@@ -199,6 +220,9 @@ async def generate_document_template(
     request: TemplateRequest,
     template_generator=Depends(_get_template_generator),
 ):
+    """
+    사용자의 주장 및 AI의 팩트체크 해석 결과를 기반으로 관련 공식 문서(진정서, 내용증명 등) 초안을 생성합니다.
+    """
     try:
         result = await template_generator.generate_template(request.claim_text, request.explanation)
         return TemplateResponse(

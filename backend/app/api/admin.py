@@ -19,6 +19,7 @@ router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(verify
 
 @router.post("/laws", response_model=LawResponse)
 def create_law(law: LawCreate, db: Session = Depends(get_db)):
+    """새로운 법령의 기본 정보(법령명 등)를 DB에 등록합니다."""
     db_law = Law(**law.model_dump())
     db.add(db_law)
     db.commit()
@@ -27,6 +28,7 @@ def create_law(law: LawCreate, db: Session = Depends(get_db)):
 
 @router.post("/articles", response_model=LawArticleResponse)
 def create_article(article: LawArticleCreate, db: Session = Depends(get_db)):
+    """특정 법령 하위에 새로운 조문(Article)을 추가합니다."""
     db_article = LawArticle(**article.model_dump())
     db.add(db_article)
     db.commit()
@@ -35,6 +37,10 @@ def create_article(article: LawArticleCreate, db: Session = Depends(get_db)):
 
 @router.post("/revisions", response_model=LawArticleRevisionResponse)
 def create_revision(revision: LawArticleRevisionCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """
+    특정 조문의 내용(Revision)을 생성합니다. 
+    생성 시 텍스트 임베딩을 백그라운드 태스크로 추가하여 벡터 스토어(검색용)에 등록합니다.
+    """
     db_revision = LawArticleRevision(**revision.model_dump())
     db.add(db_revision)
     db.commit()
@@ -57,6 +63,7 @@ def create_revision(revision: LawArticleRevisionCreate, background_tasks: Backgr
 
 @router.post("/topics", response_model=TopicResponse)
 def create_topic(topic: TopicCreate, db: Session = Depends(get_db)):
+    """키워드나 카테고리 등 법률 팩트체크 시 활용할 새로운 토픽을 추가합니다."""
     db_topic = Topic(**topic.model_dump())
     db.add(db_topic)
     db.commit()
