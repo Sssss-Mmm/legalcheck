@@ -89,10 +89,13 @@ graph TD
 ```text
 legalcheck/
 ├── backend/                  # FastAPI 기반 백엔드 모듈
-│   ├── app/api/              # REST 엔드포인트 라우터 관리
+│   ├── app/api/              # REST 엔드포인트 라우터 (endpoints, admin)
+│   ├── app/core/             # 설정·DB 세션·LLM 인스턴스 중앙 관리
 │   ├── app/services/         # RAG, 검증 로직, 문서 추출 등 핵심 비즈니스 로직
 │   ├── app/models/           # PostgreSQL 테이블 스키마 정의 (SQLAlchemy)
-│   ├── app/plugins/          # 판례 크롤링 등 외부 확장 기능 관리
+│   ├── app/schemas/          # 요청·응답 Pydantic 스키마 정의
+│   ├── app/crud/             # DB 조회·저장 CRUD 계층
+│   ├── app/plugins/          # 판례 검색, 계산기 등 외부 확장 기능 관리
 │   └── chromadb/             # Vector Store 파일 마운트 공간
 └── frontend/                 # Next.js (App Router) 기반 사용자 대시보드
     ├── src/app/              # 페이지 라우팅 로직 (채팅, 검색, 템플릿 등)
