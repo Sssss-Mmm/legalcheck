@@ -3,6 +3,7 @@
 endpoints.py의 God Function(check_fact)에서 비즈니스 로직을 분리하여
 HTTP 레이어와 비즈니스 로직의 관심사를 분리합니다.
 """
+import asyncio
 import json
 import logging
 from sqlalchemy.orm import Session
@@ -12,7 +13,7 @@ from langchain_core.output_parsers import JsonOutputParser
 from app.models import ChatSession, ChatMessage, ClaimCheck, LawArticleRevision, ExplanationCache
 from app.core.llm import get_main_llm
 from app.services.rag_service import LegalFactChecker
-from app.services.hook_service import InputAnalyzer, OutputValidator
+from app.services.hook_service import InputAnalyzer
 from app.services.agent_service import RoutingAgent
 from app.services.vision_service import VisionAnalyzer
 from app.services.verdict_utils import parse_verdict
@@ -29,7 +30,6 @@ class CheckService:
         checker: LegalFactChecker,
         analyzer: InputAnalyzer,
         agent: RoutingAgent,
-        validator: OutputValidator,
         vision: VisionAnalyzer,
     ):
         """
@@ -39,7 +39,6 @@ class CheckService:
         self.checker = checker
         self.analyzer = analyzer
         self.agent = agent
-        self.validator = validator
         self.vision = vision
 
     def get_or_create_session(self, db: Session, user_id: int, session_id: int | None, query: str) -> tuple[int, ChatSession]:
@@ -110,7 +109,8 @@ class CheckService:
 
         # 판례 검색
         if agent_decision.get("requires_precedent_search") and intent_analysis.get("keywords"):
-            precedents = search_precedents(intent_analysis["keywords"])
+            # search_precedents는 동기 urllib(blocking) → 이벤트 루프 차단 방지
+            precedents = await asyncio.to_thread(search_precedents, intent_analysis["keywords"])
             plugin_context += "\n[관련 판례/재결례 정보]\n" + json.dumps(precedents, ensure_ascii=False) + "\n"
 
         # 수당 계산기
@@ -303,9 +303,8 @@ class CheckService:
             plugin_context=plugin_context
         )
 
-        # 6. Output Hook
-        raw_parsed_result = result["result"]
-        parsed_result = await self.validator.validate_and_correct(raw_parsed_result)
+        # 6. 결과 (톤/단정표현 교정 규칙은 FACT_CHECK_SYSTEM_PROMPT에 흡수됨 — 별도 LLM 검증 pass 제거)
+        parsed_result = result["result"]
         parsed_result["is_clarification"] = False
 
         # 7. DB 저장

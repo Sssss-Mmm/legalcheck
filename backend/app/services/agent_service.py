@@ -54,10 +54,11 @@ class RoutingAgent:
 {format_instructions}
 """
         
-        user_message_content = f"앞 단계 분석 결과: {intent_data}"
+        # ChatPromptTemplate은 메시지 문자열의 {}를 변수로 파싱하므로
+        # dict를 f-string으로 박지 말고 플레이스홀더 값으로 넘긴다.
+        user_message_content = "앞 단계 분석 결과: {intent_data}"
         if chat_history:
-            recent_history = chat_history[-5:]
-            user_message_content += f"\n\n이전 대화 맥락(History): {recent_history}"
+            user_message_content += "\n\n이전 대화 맥락(History): {chat_history}"
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
@@ -65,10 +66,11 @@ class RoutingAgent:
         ])
 
         chain = prompt | self.llm | self.parser
-        
+
         try:
             result = await chain.ainvoke({
                 "intent_data": str(intent_data),
+                "chat_history": str(chat_history[-5:]) if chat_history else "",
                 "format_instructions": self.parser.get_format_instructions()
             })
             return result

@@ -3,3 +3,5 @@ backend/.env
 backend/chroma_db
 backend/legalcheck.db
 *.yml
+.claude
+.agent  

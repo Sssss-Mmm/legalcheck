@@ -5,7 +5,7 @@
 테스트 시 Mock 주입도 용이합니다.
 """
 from app.services.rag_service import LegalFactChecker
-from app.services.hook_service import InputAnalyzer, OutputValidator
+from app.services.hook_service import InputAnalyzer
 from app.services.agent_service import RoutingAgent
 from app.services.vision_service import VisionAnalyzer
 from app.services.template_service import DocumentTemplateGenerator
@@ -20,7 +20,6 @@ class ServiceContainer:
         self.checker = LegalFactChecker()
         self.analyzer = InputAnalyzer()
         self.agent = RoutingAgent()
-        self.validator = OutputValidator()
         self.vision = VisionAnalyzer()
         self.template_generator = DocumentTemplateGenerator()
         self.pdf_parser = PDFLawParser()
@@ -29,7 +28,6 @@ class ServiceContainer:
             checker=self.checker,
             analyzer=self.analyzer,
             agent=self.agent,
-            validator=self.validator,
             vision=self.vision,
         )
 

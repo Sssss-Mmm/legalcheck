@@ -5,6 +5,8 @@
 - create_access_token: JWT 토큰 생성
 """
 import logging
+from datetime import datetime, timezone, timedelta
+
 import jwt
 
 from fastapi import Header, HTTPException
@@ -20,7 +22,10 @@ JWT_ALGORITHM = settings.JWT_ALGORITHM
 
 def create_access_token(user_id: int) -> str:
     """JWT 토큰을 생성합니다."""
-    payload = {"sub": str(user_id)}
+    payload = {
+        "sub": str(user_id),
+        "exp": datetime.now(timezone.utc) + timedelta(days=7),
+    }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
